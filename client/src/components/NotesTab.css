@@ -1,0 +1,124 @@
+.notes-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.note-editor {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.note-title-input {
+  width: 100%;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.notes-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.note-item {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.note-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.note-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.note-actions {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0.7;
+}
+
+.note-item:hover .note-actions {
+  opacity: 1;
+}
+
+.note-content-preview {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  flex-grow: 1;
+  max-height: 200px;
+  overflow: hidden;
+  position: relative;
+  /* Reset some ql-editor styles if needed */
+  padding: 0 !important;
+}
+
+/* Create a fade effect for long content */
+.note-content-preview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, var(--card-bg));
+  pointer-events: none;
+}
+
+.note-meta {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+/* React Quill Overrides */
+.quill {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.ql-toolbar {
+  border-color: var(--border) !important;
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.ql-container {
+  border-color: var(--border) !important;
+  border-bottom-left-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+  font-family: inherit !important;
+  min-height: 200px;
+}
+
+.ql-editor {
+  min-height: 200px;
+}
+

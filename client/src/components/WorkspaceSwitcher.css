@@ -1,0 +1,481 @@
+.workspace-switcher {
+  position: relative;
+  z-index: 1;
+}
+
+.workspace-switcher.expanded {
+  z-index: 9999;
+}
+
+/* Avatar button for collapsed mode - matches expanded trigger design */
+.ws-avatar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  overflow: hidden;
+}
+
+.ws-avatar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ws-avatar-btn .user-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--primary, #6366f1) 0%, var(--primary-dark, #4f46e5) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ws-avatar-btn .ws-chevron {
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.ws-avatar-btn:hover .ws-chevron {
+  color: #cbd5e1;
+}
+
+.ws-avatar-btn .ws-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Trigger button for expanded mode */
+.ws-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: right;
+}
+
+.ws-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ws-trigger .user-avatar {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ws-trigger-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.ws-trigger-name {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-trigger-workspace {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-role-inline {
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.ws-chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.ws-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown */
+.ws-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  width: auto;
+  min-width: 100%;
+  background: rgba(26, 35, 50, 0.98);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  padding: 8px 0;
+  animation: slideUp 0.15s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ws-dropdown-header {
+  padding: 8px 12px;
+}
+
+.ws-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.ws-current svg {
+  color: var(--primary);
+}
+
+.ws-name {
+  font-weight: 500;
+  flex: 1;
+}
+
+.ws-dropdown-section-title {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ws-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
+/* Workspace list */
+.ws-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ws-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: right;
+}
+
+.ws-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(-2px);
+}
+
+.ws-item:hover .ws-item-name {
+  color: #fff;
+}
+
+.ws-item.active {
+  background: rgba(var(--primary-rgb), 0.1);
+}
+
+.ws-item svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.ws-item.active svg {
+  color: #818cf8;
+}
+
+.ws-item-name {
+  flex: 1;
+  font-size: 13px;
+  color: #f1f5f9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.ws-role {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.ws-role.role-owner {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+}
+
+.ws-role.role-admin {
+  background: rgba(var(--primary-rgb), 0.15);
+  color: var(--primary);
+}
+
+.ws-role.role-member {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.ws-check {
+  color: #818cf8;
+  flex-shrink: 0;
+}
+
+/* Actions */
+.ws-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.1s ease;
+  text-align: right;
+}
+
+.ws-action:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.ws-action.create {
+  color: var(--primary);
+}
+
+.ws-action.create:hover {
+  background: rgba(var(--primary-rgb), 0.15);
+  transform: translateX(-2px);
+  color: var(--primary-light, #818cf8);
+}
+
+.ws-action.logout {
+  color: var(--danger);
+}
+
+.ws-action.logout:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ws-action svg {
+  flex-shrink: 0;
+}
+
+/* Modal */
+.ws-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ws-modal {
+  background: var(--card-bg, #1a1a2e);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 380px;
+  animation: scaleIn 0.2s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ws-modal h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.ws-modal input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.ws-modal input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.ws-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+
+.ws-modal-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ws-modal-actions button[type="button"] {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.ws-modal-actions button[type="button"]:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ws-modal-actions button.primary {
+  background: var(--primary);
+  border: none;
+  color: white;
+}
+
+.ws-modal-actions button.primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.ws-modal-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Collapsed mode adjustments */
+.workspace-switcher.collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* Overlay for collapsed dropdown - rendered at root level */
+.ws-collapsed-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  background: transparent;
+}
+
+/* Dropdown in collapsed mode - positioned at bottom right */
+.ws-dropdown.ws-dropdown-collapsed {
+  position: fixed;
+  bottom: 20px;
+  right: 80px;
+  left: auto;
+  top: auto;
+  min-width: 240px;
+  width: auto;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  z-index: 9999;
+  animation: slideInFromRight 0.15s ease;
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Ensure dropdown stays on screen */
+@media (max-height: 500px) {
+  .ws-dropdown.ws-dropdown-collapsed {
+    bottom: 10px;
+    max-height: calc(100vh - 20px);
+  }
+}
+

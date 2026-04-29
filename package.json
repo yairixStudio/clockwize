@@ -1,0 +1,17 @@
+{
+  "name": "clockwize",
+  "version": "1.0.0",
+  "description": "Freelancer management app for clients, projects, tasks and time tracking",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:server\" \"sleep 2 && npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
+

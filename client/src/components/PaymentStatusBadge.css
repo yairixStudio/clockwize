@@ -1,0 +1,108 @@
+.payment-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  cursor: default;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.payment-status-badge.clickable {
+  cursor: pointer;
+}
+
+.payment-status-badge.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Paid - Green */
+.payment-status-badge.badge-paid {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.payment-status-badge.badge-paid:hover {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+/* Partial - Yellow/Orange */
+.payment-status-badge.badge-partial {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.payment-status-badge.badge-partial:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+/* Unpaid - Red */
+.payment-status-badge.badge-unpaid {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.payment-status-badge.badge-unpaid:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.badge-icon {
+  flex-shrink: 0;
+}
+
+.badge-fraction {
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  letter-spacing: -0.02em;
+}
+
+.badge-check {
+  margin-right: 0.1rem;
+  font-size: 0.85em;
+}
+
+.badge-balance {
+  font-size: 0.85em;
+  opacity: 0.85;
+  margin-right: 0.25rem;
+  direction: rtl;
+}
+
+/* Compact mode for mobile/small spaces */
+.payment-status-badge.compact .badge-fraction {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .payment-status-badge:not(.compact) {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+  }
+  
+  .payment-status-badge:not(.compact) .badge-fraction {
+    display: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .payment-status-badge.badge-paid {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+  }
+  
+  .payment-status-badge.badge-partial {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+  }
+  
+  .payment-status-badge.badge-unpaid {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+  }
+}

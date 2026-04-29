@@ -1,0 +1,242 @@
+.catalog-page .page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* Filters */
+.catalog-filters {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  min-width: 250px;
+}
+
+.search-input-wrapper svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.search-input:focus {
+  outline: none;
+}
+
+.filter-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  min-width: 150px;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-toggle:hover {
+  background: var(--bg-secondary);
+}
+
+.filter-toggle.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Catalog Groups */
+.catalog-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.catalog-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.catalog-group-count {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 500;
+}
+
+/* Catalog Items Grid */
+.catalog-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.catalog-item {
+  padding: 1rem;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.catalog-item:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.catalog-item.inactive {
+  opacity: 0.6;
+  background: var(--bg-secondary);
+}
+
+.catalog-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.catalog-item-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.catalog-item-badge {
+  font-size: 0.7rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.catalog-item-badge.inactive {
+  background: var(--warning-light);
+  color: var(--warning);
+}
+
+.catalog-item-description {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
+}
+
+.catalog-item-price {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--success);
+  margin-bottom: 0.5rem;
+}
+
+.catalog-item-price svg {
+  flex-shrink: 0;
+}
+
+.price-value {
+  font-weight: 600;
+}
+
+.price-type {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.catalog-item-notes {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin: 0.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-color);
+  font-style: italic;
+}
+
+.catalog-item-actions {
+  display: flex;
+  gap: 0.25rem;
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.catalog-item:hover .catalog-item-actions {
+  opacity: 1;
+}
+
+.catalog-item-actions .btn-icon-tiny.danger {
+  color: var(--error);
+}
+
+.catalog-item-actions .btn-icon-tiny.danger:hover {
+  background: var(--error-light);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .catalog-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input-wrapper {
+    min-width: auto;
+  }
+
+  .catalog-items {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-item-actions {
+    opacity: 1;
+  }
+}

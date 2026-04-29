@@ -1,0 +1,269 @@
+/* Addons Page */
+.addons-page {
+  max-width: 900px;
+}
+
+.addons-page .page-header {
+  margin-bottom: 1.5rem;
+}
+
+.addons-page .page-title-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.addons-page .page-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+.addons-page .page-title {
+  margin-bottom: 0.25rem;
+}
+
+.addons-page .page-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* Info Banner */
+.addons-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.addons-info-banner svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* Addons Grid */
+.addons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Addon Card */
+.addon-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.addon-card.enabled {
+  border-color: var(--success);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);
+}
+
+.addon-card.disabled {
+  opacity: 0.8;
+}
+
+.addon-card.updating {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.addon-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Addon Header */
+.addon-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.addon-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.addon-icon-wrapper.active {
+  background: var(--primary);
+  color: white;
+}
+
+.addon-title-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.addon-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary);
+}
+
+.addon-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.addon-status.enabled {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+}
+
+.addon-status.disabled {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+/* Addon Description */
+.addon-description {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 1.25rem 0;
+}
+
+/* Addon Footer */
+.addon-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Toggle Button */
+.addon-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.addon-toggle.toggle-on {
+  background: var(--success);
+  color: white;
+}
+
+.addon-toggle.toggle-off {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.addon-toggle:hover:not(:disabled) {
+  transform: scale(1.02);
+}
+
+.addon-toggle:disabled {
+  cursor: not-allowed;
+}
+
+/* Toggle Track */
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  border-radius: 9999px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.toggle-on .toggle-track {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.toggle-off .toggle-track {
+  background: var(--border);
+}
+
+/* Toggle Thumb */
+.toggle-thumb {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.toggle-on .toggle-thumb {
+  right: 2px;
+  background: white;
+  color: var(--success);
+}
+
+.toggle-off .toggle-thumb {
+  left: 2px;
+  background: var(--text-secondary);
+  color: var(--bg);
+}
+
+/* Toggle Spinner */
+.toggle-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toggle Label */
+.toggle-label {
+  min-width: 2.5rem;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .addons-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .addons-page .page-title-section {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .addons-info-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+

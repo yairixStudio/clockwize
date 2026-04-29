@@ -1,0 +1,324 @@
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { clientsAPI } from '../services/api';
+
+function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = null }) {
+  useBodyScrollLock(true);
+  const formRef = useRef(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    client_id: '',
+    description: '',
+    pricing_type: 'hourly',
+    fixed_price: '',
+    hourly_rate: '',
+    status: 'active',
+    notes: '',
+    paid_amount: '',
+    estimated_hours: '',
+    priority: 'normal',
+    communication_platforms: []
+  });
+  const [loading, setLoading] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [pricingType, setPricingType] = useState('hourly');
+  
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const data = await clientsAPI.getAll();
+        setClients(data);
+      } catch (error) {
+        console.error('Failed to load clients:', error);
+      }
+    };
+    loadClients();
+  }, []);
+
+  useEffect(() => {
+    if (project) {
+      const platforms = project.communication_platforms
+        ? (typeof project.communication_platforms === 'string' ? JSON.parse(project.communication_platforms) : project.communication_platforms)
+        : [];
+      setFormData({
+        name: project.name || '',
+        client_id: project.client_id || clientId || '',
+        description: project.description || '',
+        pricing_type: project.pricing_type || 'hourly',
+        fixed_price: project.fixed_price || '',
+        hourly_rate: project.hourly_rate || '',
+        status: project.status || 'active',
+        notes: project.notes || '',
+        paid_amount: project.paid_amount || '',
+        estimated_hours: project.estimated_hours || '',
+        priority: project.priority || 'normal',
+        communication_platforms: platforms
+      });
+      setPricingType(project.pricing_type || 'hourly');
+    } else {
+      setFormData(prev => ({ ...prev, client_id: clientId || '' }));
+    }
+  }, [project, clientId]);
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'pricing_type') {
+      setPricingType(value);
+    }
+  };
+
+  const handlePlatformToggle = (platform) => {
+    setFormData(prev => {
+      const current = prev.communication_platforms || [];
+      const updated = current.includes(platform)
+        ? current.filter(p => p !== platform)
+        : [...current, platform];
+      return { ...prev, communication_platforms: updated };
+    });
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    // Read directly from form to support programmatic input
+    const form = formRef.current;
+    const currentPricingType = form.pricing_type.value;
+    
+    const data = {
+      name: form.name.value,
+      client_id: form.client_id ? form.client_id.value : null,
+      description: form.description.value || null,
+      pricing_type: currentPricingType,
+      fixed_price: currentPricingType === 'fixed' && form.fixed_price ? parseFloat(form.fixed_price.value) : null,
+      hourly_rate: currentPricingType === 'hourly' && form.hourly_rate ? parseFloat(form.hourly_rate.value) : null,
+      status: form.status ? form.status.value : 'active',
+      notes: form.notes ? form.notes.value : null,
+      paid_amount: form.paid_amount ? parseFloat(form.paid_amount.value) : 0,
+      estimated_hours: form.estimated_hours && form.estimated_hours.value ? parseFloat(form.estimated_hours.value) : null,
+      priority: form.priority ? form.priority.value : 'normal',
+      communication_platforms: formData.communication_platforms.length > 0 ? formData.communication_platforms : null
+    };
+    
+    try {
+      await onSave(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">{project ? 'עריכת פרויקט' : 'פרויקט חדש'}</h3>
+          <button onClick={onClose} className="btn btn-ghost btn-icon">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <form ref={formRef} onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label className="form-label">שם הפרויקט *</label>
+              <input
+                type="text"
+                name="name"
+                className="form-input"
+                value={formData.name}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">לקוח *</label>
+              <select
+                name="client_id"
+                className="form-input"
+                value={formData.client_id}
+                onChange={handleChange}
+                required
+                disabled={!!clientId && !project} // Disable if fixed client context (unless editing, but usually editing shouldn't change client easily)
+              >
+                <option value="">בחר לקוח...</option>
+                {clients.map(client => (
+                  <option key={client.id} value={client.id}>{client.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">תיאור</label>
+              <textarea
+                name="description"
+                className="form-input"
+                value={formData.description}
+                onChange={handleChange}
+                rows={3}
+              />
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">סוג תמחור</label>
+              <select
+                name="pricing_type"
+                className="form-input"
+                value={formData.pricing_type}
+                onChange={handleChange}
+              >
+                <option value="hourly">לפי שעה</option>
+                <option value="fixed">מחיר קבוע</option>
+                <option value="no_charge">ללא תשלום</option>
+              </select>
+            </div>
+            
+            {pricingType === 'fixed' ? (
+              <div className="form-group">
+                <label className="form-label">מחיר קבוע (₪)</label>
+                <input
+                  type="number"
+                  name="fixed_price"
+                  className="form-input"
+                  value={formData.fixed_price}
+                  onChange={handleChange}
+                  min="0"
+                  step="0.01"
+                  dir="ltr"
+                />
+              </div>
+            ) : pricingType === 'hourly' ? (
+              <div className="form-group">
+                <label className="form-label">מחיר לשעה (₪)</label>
+                <input
+                  type="number"
+                  name="hourly_rate"
+                  className="form-input"
+                  value={formData.hourly_rate}
+                  onChange={handleChange}
+                  placeholder={clientHourlyRate ? `ברירת מחדל: ₪${clientHourlyRate}` : 'השאר ריק לשימוש בברירת המחדל'}
+                  min="0"
+                  step="0.01"
+                  dir="ltr"
+                />
+              </div>
+            ) : null}
+            
+            <div className="form-group">
+              <label className="form-label">סטטוס</label>
+              <select
+                name="status"
+                className="form-input"
+                value={formData.status}
+                onChange={handleChange}
+              >
+                <option value="active">🟢 פעיל</option>
+                <option value="in_progress">🔄 בתהליך</option>
+                <option value="stuck">🚫 תקוע</option>
+                <option value="review">👀 בבדיקה</option>
+                <option value="on_hold">⏸️ מוקפא</option>
+                <option value="completed">✅ הושלם</option>
+                <option value="cancelled">❌ בוטל</option>
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">🎯 חשיבות</label>
+              <select
+                name="priority"
+                className="form-input"
+                value={formData.priority}
+                onChange={handleChange}
+              >
+                <option value="low">🔽 נמוכה</option>
+                <option value="normal">➖ רגילה</option>
+                <option value="high">🔼 גבוהה</option>
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">📱 פלטפורמת התקשרות</label>
+              <div className="platform-chips">
+                {[
+                  { value: 'whatsapp', label: 'ווצאפ' },
+                  { value: 'email', label: 'מייל' },
+                  { value: 'phone', label: 'טלפון' },
+                  { value: 'other', label: 'אחר' }
+                ].map(platform => (
+                  <button
+                    key={platform.value}
+                    type="button"
+                    className={`platform-chip ${(formData.communication_platforms || []).includes(platform.value) ? 'active' : ''}`}
+                    onClick={() => handlePlatformToggle(platform.value)}
+                  >
+                    {platform.label}
+                  </button>
+                ))}
+              </div>
+              <small className="form-hint">בחר את הפלטפורמות שבהן התנהלה התקשורת עם הלקוח</small>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">⏱️ שעות משוערות</label>
+              <input
+                type="number"
+                name="estimated_hours"
+                className="form-input"
+                value={formData.estimated_hours}
+                onChange={handleChange}
+                placeholder="כמה שעות אתה מעריך שהפרויקט ייקח?"
+                min="0"
+                step="0.5"
+                dir="ltr"
+              />
+              <small className="form-hint">הזן את הערכת השעות לפרויקט זה כדי לעקוב אחרי ההתקדמות</small>
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">💵 סכום ששולם (₪)</label>
+              <input
+                type="number"
+                name="paid_amount"
+                className="form-input"
+                value={formData.paid_amount}
+                onChange={handleChange}
+                placeholder="הזן סכום ששולם ע״י הלקוח"
+                min="0"
+                step="0.01"
+                dir="ltr"
+              />
+            </div>
+            
+            <div className="form-group">
+              <label className="form-label">📝 פתק פרטי (לעצמך)</label>
+              <textarea
+                name="notes"
+                className="form-input notes-input"
+                value={formData.notes}
+                onChange={handleChange}
+                rows={4}
+                placeholder="רשום כאן סיכומים, מה חשוב ללקוח, תזכורות לעצמך..."
+              />
+              <small className="form-hint">הפתק הזה לא יופיע בדף השיתוף ללקוח</small>
+            </div>
+          </div>
+          
+          <div className="modal-footer">
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? 'שומר...' : 'שמור'}
+            </button>
+            <button type="button" onClick={onClose} className="btn btn-secondary">
+              ביטול
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+export default ProjectModal;

@@ -1,0 +1,220 @@
+/* Active Timer Entry - Shows running timers in time entries list */
+.active-timer-entry {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.03) 100%);
+  border: 2px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.5rem;
+  position: relative;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+.active-timer-entry.paused {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.active-timer-entry::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--success), var(--primary));
+  animation: shimmer 2s infinite linear;
+}
+
+.active-timer-entry.paused::before {
+  background: linear-gradient(90deg, var(--warning), var(--warning-light));
+  animation: none;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Indicator */
+.active-timer-entry-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 50px;
+}
+
+.active-timer-entry-indicator span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+.active-timer-entry.paused .active-timer-entry-indicator span {
+  color: var(--warning);
+}
+
+.pulse-dot {
+  width: 12px;
+  height: 12px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+
+.active-timer-entry.paused .pulse-dot {
+  background: var(--warning);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+}
+
+/* Content */
+.active-timer-entry-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.active-timer-entry-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.active-timer-entry-duration-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.active-timer-entry-duration {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+.active-timer-entry.paused .active-timer-entry-duration {
+  color: var(--warning);
+}
+
+.active-timer-entry-range {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.active-timer-entry-range svg {
+  color: var(--text-muted);
+}
+
+.timer-icon-animated {
+  color: var(--success) !important;
+  animation: spin 2s linear infinite;
+}
+
+.active-timer-entry.paused .timer-icon-animated {
+  color: var(--warning) !important;
+  animation: none;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Details */
+.active-timer-entry-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.8rem;
+}
+
+.active-timer-entry-project,
+.active-timer-entry-task {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+}
+
+.active-timer-entry-project svg,
+.active-timer-entry-task svg {
+  color: var(--text-muted);
+}
+
+.active-timer-entry-project a,
+.active-timer-entry-task a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.active-timer-entry-project a:hover,
+.active-timer-entry-task a:hover {
+  text-decoration: underline;
+}
+
+/* Actions */
+.active-timer-entry-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .active-timer-entry {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .active-timer-entry-indicator {
+    flex-direction: row;
+    min-width: auto;
+  }
+
+  .active-timer-entry-content {
+    width: 100%;
+    order: 1;
+  }
+
+  .active-timer-entry-actions {
+    order: 0;
+  }
+
+  .active-timer-entry-duration {
+    font-size: 1.25rem;
+  }
+}

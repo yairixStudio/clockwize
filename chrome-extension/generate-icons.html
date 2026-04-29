@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Clockwize Icons</title></head>
+<body style="background:#1e293b; padding:40px; font-family:sans-serif; color:#f1f5f9;">
+<h2>Clockwize Icon Generator</h2>
+<p>Right-click each icon and "Save image as..." to the icons/ folder</p>
+<div style="display:flex; gap:32px; align-items:end; margin-top:24px;">
+  <div style="text-align:center">
+    <canvas id="c16" width="16" height="16"></canvas>
+    <p>icon16.png</p>
+  </div>
+  <div style="text-align:center">
+    <canvas id="c32" width="32" height="32"></canvas>
+    <p>icon32.png</p>
+  </div>
+  <div style="text-align:center">
+    <canvas id="c48" width="48" height="48"></canvas>
+    <p>icon48.png</p>
+  </div>
+  <div style="text-align:center">
+    <canvas id="c128" width="128" height="128"></canvas>
+    <p>icon128.png</p>
+  </div>
+</div>
+<br>
+<button id="download-all" style="padding:12px 24px; background:#6366f1; color:#fff; border:none; border-radius:6px; font-size:16px; cursor:pointer;">
+  Download All Icons
+</button>
+<script>
+function drawIcon(canvas) {
+  const s = canvas.width;
+  const ctx = canvas.getContext('2d');
+  const cx = s / 2;
+  const cy = s / 2;
+  const r = s * 0.42;
+
+  // Background circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, s / 2, 0, Math.PI * 2);
+  ctx.fillStyle = '#6366f1';
+  ctx.fill();
+
+  // Inner circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#0f172a';
+  ctx.fill();
+
+  // Clock border
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = '#a5b4fc';
+  ctx.lineWidth = Math.max(1, s * 0.04);
+  ctx.stroke();
+
+  // Hour hand
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx, cy - r * 0.55);
+  ctx.strokeStyle = '#f1f5f9';
+  ctx.lineWidth = Math.max(1, s * 0.06);
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Minute hand
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + r * 0.55, cy);
+  ctx.strokeStyle = '#a5b4fc';
+  ctx.lineWidth = Math.max(1, s * 0.04);
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(1, s * 0.06), 0, Math.PI * 2);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.fill();
+}
+
+['c16','c32','c48','c128'].forEach(id => {
+  drawIcon(document.getElementById(id));
+});
+
+document.getElementById('download-all').addEventListener('click', () => {
+  ['c16','c32','c48','c128'].forEach(id => {
+    const canvas = document.getElementById(id);
+    const link = document.createElement('a');
+    link.download = `icon${canvas.width}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+});
+</script>
+</body>
+</html>

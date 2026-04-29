@@ -1,0 +1,612 @@
+/* Container for multiple timers */
+.active-timers-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: relative;
+}
+
+/* When in sidebar (desktop) - using is-sidebar class */
+.active-timers-container.is-sidebar {
+  width: 100%;
+}
+
+/* When in sidebar (desktop) */
+.sidebar-timer .active-timers-container {
+  width: 100%;
+}
+
+/* When in mobile header */
+.mobile-header-actions .active-timers-container {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Sidebar timers header */
+.sidebar-timers-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.5rem;
+  background: var(--accent-glow, rgba(129, 140, 248, 0.15));
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.25rem;
+}
+
+.sidebar-timer-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+/* Sidebar timers list */
+.active-timers-list.sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-left: 4px;
+}
+
+.active-timers-list.sidebar-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.active-timers-list.sidebar-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.active-timers-list.sidebar-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.active-timers-list.sidebar-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Compact timer items in sidebar when there are multiple */
+.active-timers-list.sidebar-list .active-timer-item {
+  padding: 0.5rem 0.75rem;
+}
+
+.active-timers-list.sidebar-list .timer-time {
+  font-size: 1rem;
+}
+
+.active-timers-list.sidebar-list .timer-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.timers-expand-btn {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mobile-header-actions .timers-expand-btn {
+  display: flex;
+}
+
+.timers-expand-btn:hover {
+  background: var(--accent-secondary);
+}
+
+.timer-count {
+  background: white;
+  color: var(--accent-primary);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.7rem;
+}
+
+.expand-icon {
+  font-size: 0.6rem;
+}
+
+.active-timers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+/* In sidebar - always show all timers in a column */
+.sidebar-timer .active-timers-list {
+  flex-direction: column;
+}
+
+/* In mobile header - show only first timer */
+.mobile-header-actions .active-timers-list:not(.expanded) {
+  flex-direction: row;
+}
+
+.mobile-header-actions .active-timers-list.expanded {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  z-index: 100;
+  box-shadow: var(--shadow-lg);
+  min-width: 280px;
+  max-width: calc(100vw - 1rem);
+}
+
+/* Single timer item */
+.active-timer-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.active-timer-item.running {
+  border-color: var(--success);
+  background: rgba(16, 185, 129, 0.08);
+  box-shadow: 0 0 0 1px var(--success);
+}
+
+.active-timer-item.paused {
+  border-color: var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* In mobile header - more compact */
+.mobile-header-actions .active-timer-item {
+  padding: 0.5rem 0.75rem;
+}
+
+.timer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.timer-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In sidebar - allow more width for label */
+.sidebar-timer .timer-label {
+  max-width: none;
+}
+
+/* In mobile header - restrict width */
+.mobile-header-actions .timer-label {
+  max-width: 120px;
+  font-size: 0.7rem;
+}
+
+.timer-time {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.running .timer-time {
+  color: var(--success);
+}
+
+.paused .timer-time {
+  color: var(--warning);
+}
+
+.mobile-header-actions .timer-time {
+  font-size: 1rem;
+}
+
+.timer-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.timer-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.timer-btn.play {
+  color: var(--success);
+}
+
+.timer-btn.play:hover {
+  background: var(--success-bg);
+}
+
+.timer-btn.pause {
+  color: var(--warning);
+}
+
+.timer-btn.pause:hover {
+  background: var(--warning-bg);
+}
+
+.timer-btn.stop {
+  color: var(--accent-primary);
+}
+
+.timer-btn.stop:hover {
+  background: var(--accent-glow);
+}
+
+.timer-btn.discard {
+  color: var(--text-muted);
+}
+
+.timer-btn.discard:hover {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
+.timer-btn.edit {
+  color: var(--text-secondary);
+}
+
+.timer-btn.edit:hover {
+  color: var(--accent-primary);
+  background: var(--accent-glow);
+}
+
+/* Stop modal summary */
+.stop-summary {
+  background: var(--bg-primary);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.stop-summary p {
+  margin-bottom: 0.25rem;
+  color: var(--text-secondary);
+}
+
+.stop-summary strong {
+  color: var(--text-primary);
+}
+
+/* Collapsed timer indicator for sidebar */
+.collapsed-timer-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.collapsed-timer-indicator.running {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--success);
+}
+
+.collapsed-timer-indicator.paused {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--warning);
+}
+
+.collapsed-timer-indicator:hover {
+  transform: scale(1.02);
+}
+
+.collapsed-timer-indicator.running:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.collapsed-timer-indicator.paused:hover {
+  background: rgba(245, 158, 11, 0.25);
+}
+
+.collapsed-timer-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+
+.collapsed-timer-indicator.running .collapsed-timer-icon {
+  color: var(--success);
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.collapsed-timer-indicator.paused .collapsed-timer-icon {
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.collapsed-timer-time {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collapsed-timer-indicator.running .collapsed-timer-time {
+  color: var(--success);
+}
+
+.collapsed-timer-indicator.paused .collapsed-timer-time {
+  color: var(--warning);
+}
+
+.collapsed-timer-count {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-glow);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Client timer styling */
+.active-timer-item.client-timer {
+  border-right: 3px solid var(--accent-secondary);
+}
+
+.client-timer-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.client-timer-icon {
+  color: var(--accent-secondary);
+  flex-shrink: 0;
+}
+
+.client-timer-stop-info {
+  background: var(--bg-primary);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.client-timer-stop-info p {
+  margin-bottom: 0.5rem;
+}
+
+.client-timer-stop-info p:last-child {
+  margin-bottom: 0;
+}
+
+/* Intervals Section - Main */
+.intervals-section-main {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.intervals-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.intervals-header-main svg {
+  color: var(--primary);
+}
+
+.intervals-total-badge {
+  margin-right: auto;
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.intervals-list-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.interval-edit-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.2s;
+}
+
+.interval-edit-item:hover {
+  border-color: var(--primary-light);
+}
+
+.interval-edit-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--primary-light);
+  color: var(--primary);
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.interval-edit-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.interval-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.interval-edit-row label {
+  width: 55px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.interval-date-input {
+  width: 130px !important;
+  padding: 0.4rem 0.5rem !important;
+  font-size: 0.8rem !important;
+}
+
+.interval-time-input {
+  width: 90px !important;
+  padding: 0.4rem 0.5rem !important;
+  font-size: 0.8rem !important;
+}
+
+.interval-edit-duration {
+  font-weight: 600;
+  color: var(--primary);
+  font-size: 0.875rem;
+  min-width: 70px;
+  text-align: center;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.interval-delete-btn {
+  color: var(--error) !important;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.interval-edit-item:hover .interval-delete-btn {
+  opacity: 1;
+}
+
+.interval-delete-btn:hover {
+  background: var(--error-light) !important;
+}
+
+.add-interval-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+  justify-content: center;
+  border: 1px dashed var(--border-color);
+  color: var(--text-secondary);
+}
+
+.add-interval-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .active-timers-list.expanded {
+    left: 0;
+    right: auto;
+    min-width: 280px;
+    max-width: calc(100vw - 1rem);
+  }
+  
+  .timer-label {
+    max-width: 120px;
+  }
+
+  .interval-edit-item {
+    flex-wrap: wrap;
+    padding: 0.5rem;
+  }
+  .interval-edit-fields {
+    width: 100%;
+    order: 1;
+    margin-top: 0.5rem;
+  }
+  .interval-edit-row {
+    flex-wrap: wrap;
+  }
+  .interval-edit-row label {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+  .interval-date-input,
+  .interval-time-input {
+    flex: 1;
+    min-width: 0;
+  }
+  .interval-edit-duration {
+    margin-right: auto;
+  }
+}
+
+/* New item inline (for creating new project/task) */
+.new-item-inline {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.new-item-inline .form-input {
+  flex: 1;
+}
+
+.new-item-inline .btn {
+  flex-shrink: 0;
+}

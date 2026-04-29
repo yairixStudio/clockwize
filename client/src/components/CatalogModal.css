@@ -1,0 +1,203 @@
+/* Catalog Modal Styles */
+.catalog-modal {
+  max-width: 560px;
+  width: 100%;
+}
+
+.catalog-modal .modal-header {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, transparent 100%);
+}
+
+.catalog-modal .modal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.catalog-modal .modal-title svg {
+  color: var(--accent-primary);
+}
+
+.catalog-modal .modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.catalog-modal .form-group {
+  margin-bottom: 1rem;
+}
+
+.catalog-modal .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.catalog-modal .form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.catalog-modal .form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  transition: all var(--transition-fast);
+}
+
+.catalog-modal .form-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.catalog-modal .form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.catalog-modal textarea.form-input {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.catalog-modal textarea.notes-input {
+  background: rgba(99, 102, 241, 0.05);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.catalog-modal textarea.notes-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.catalog-modal select.form-input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 1rem center;
+  padding-left: 2.5rem;
+}
+
+/* Form Row - Two columns */
+.catalog-modal .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.catalog-modal .form-row .form-group {
+  margin-bottom: 0;
+}
+
+/* Form Hint */
+.catalog-modal .form-hint {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Category Select Wrapper */
+.catalog-modal .category-select-wrapper {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.catalog-modal .category-select-wrapper select,
+.catalog-modal .category-select-wrapper input {
+  flex: 1;
+}
+
+.catalog-modal .category-select-wrapper .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Checkbox Group */
+.catalog-modal .checkbox-group {
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.catalog-modal .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.catalog-modal .checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+}
+
+.catalog-modal .checkbox-group .form-hint {
+  margin-top: 0.5rem;
+  margin-right: 2rem;
+}
+
+/* Modal Footer */
+.catalog-modal .modal-footer {
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.75rem;
+}
+
+.catalog-modal .modal-footer .btn {
+  flex: 1;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+}
+
+.catalog-modal .modal-footer .btn-primary {
+  flex: 2;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .catalog-modal {
+    max-width: 100%;
+    margin: 0.5rem;
+  }
+  
+  .catalog-modal .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  
+  .catalog-modal .form-row .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .catalog-modal .category-select-wrapper {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .catalog-modal .modal-footer {
+    flex-direction: column;
+  }
+  
+  .catalog-modal .modal-footer .btn {
+    flex: none;
+  }
+}

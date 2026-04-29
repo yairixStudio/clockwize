@@ -1,0 +1,168 @@
+.lead-list-table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+}
+
+.lead-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.lead-list-table thead {
+  background: var(--bg-secondary);
+}
+
+.lead-list-table th {
+  padding: 0.75rem 1rem;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.lead-list-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.lead-list-table th.sortable:hover {
+  color: var(--text-primary);
+}
+
+.lead-list-table th svg {
+  display: inline;
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
+.lead-list-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.lead-list-row:hover {
+  background: var(--bg-card-hover, rgba(255, 255, 255, 0.02));
+}
+
+.lead-list-row td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.lead-list-name-cell {
+  min-width: 160px;
+}
+
+.lead-list-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lead-opportunity-icon {
+  color: #8b5cf6;
+  flex-shrink: 0;
+}
+
+.lead-list-company {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.lead-list-source {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.lead-source-detail {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.lead-list-value {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lead-list-date {
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.lead-list-assigned {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.lead-list-actions {
+  position: relative;
+  width: 40px;
+}
+
+.lead-list-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 4px 12px rgba(0, 0, 0, 0.3));
+  z-index: 50;
+  min-width: 140px;
+  overflow: hidden;
+}
+
+.lead-list-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: right;
+}
+
+.lead-list-menu button:hover {
+  background: var(--bg-secondary);
+}
+
+.lead-list-menu button.danger {
+  color: var(--error);
+}
+
+.lead-list-empty {
+  text-align: center;
+  padding: 3rem;
+  color: var(--text-secondary);
+}
+
+/* Badges common styles */
+.lead-status-badge,
+.lead-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.lead-status-badge--sm,
+.lead-priority-badge--sm {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}

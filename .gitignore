@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.app/
+
+# Environment / local config
+.env
+.env.*
+.server-port
+.local-session
+
+# User data (DB & uploads should NOT be committed)
+server/clockwize.db
+server/clockwize.db-journal
+server/clockwize.db-wal
+server/clockwize.db-shm
+server/uploads/*
+!server/uploads/.gitkeep
+backups/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+
+# Tooling/cache
+.claude/
+.cache/
+coverage/

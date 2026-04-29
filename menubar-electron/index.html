@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clockwize - התחברות</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="logo">🕐</div>
+    <h1>Clockwize</h1>
+    <p class="subtitle">התחבר לחשבון שלך</p>
+    
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">אימייל</label>
+        <input type="email" id="email" placeholder="your@email.com" required>
+      </div>
+      
+      <div class="field">
+        <label for="password">סיסמא</label>
+        <input type="password" id="password" placeholder="••••••••" required>
+      </div>
+      
+      <button type="submit" id="loginBtn">
+        <span class="btn-text">התחבר</span>
+        <span class="spinner" style="display: none;">⏳</span>
+      </button>
+      
+      <p class="error" id="error"></p>
+    </form>
+  </div>
+  
+  <script src="renderer.js"></script>
+</body>
+</html>

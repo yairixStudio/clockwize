@@ -1,0 +1,60 @@
+.lead-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.lead-filter-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 200px;
+  max-width: 350px;
+  position: relative;
+}
+
+.lead-filter-search svg {
+  position: absolute;
+  right: 10px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.lead-filter-search .form-input {
+  padding-right: 36px;
+  width: 100%;
+}
+
+.lead-filter-toggle.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.filter-active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.lead-filter-toggle.active .filter-active-dot {
+  background: white;
+}
+
+.lead-filter-dropdowns {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  width: 100%;
+  padding-top: 0.5rem;
+}
+
+.lead-filter-dropdowns .form-input-sm {
+  padding: 0.35rem 0.6rem;
+  padding-left: 1.5rem;
+  font-size: 0.85rem;
+  min-width: 140px;
+}
