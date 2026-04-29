@@ -40,3 +40,7 @@ Thumbs.db
 .claude/
 .cache/
 coverage/
+
+# Local backups (e.g. old git history backup)
+.git.old-private-backup/
+.git.backup*/
