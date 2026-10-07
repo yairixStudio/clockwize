@@ -2,17 +2,13 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { UPLOADS_DIR } from '../paths.js';
 
 const router = express.Router();
 
 // Ensure uploads directory exists
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
@@ -35,6 +31,14 @@ const upload = multer({
         fileSize: 50 * 1024 * 1024 // 50MB max
     }
 });
+
+// Busboy decodes multipart file names as latin1, but browsers send them as raw UTF-8,
+// so a Hebrew name arrives garbled. Re-decode when the bytes form valid UTF-8.
+const decodeFileName = (name) => {
+    if (!/[^\x00-\x7f]/.test(name) || /[^\x00-\xff]/.test(name)) return name;
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    return decoded.includes('\uFFFD') ? name : decoded;
+};
 
 // Get files by entity
 router.get('/', authMiddleware, workspaceMiddleware, (req, res) => {
@@ -114,7 +118,7 @@ router.post('/upload', authMiddleware, workspaceMiddleware, upload.single('file'
         client_id: client_id || null,
         project_id: project_id || null,
         task_id: task_id || null,
-        original_name: req.file.originalname,
+        original_name: decodeFileName(req.file.originalname),
         storage_path: req.file.filename,
         mime_type: req.file.mimetype,
         size: req.file.size

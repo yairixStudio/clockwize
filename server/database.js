@@ -1,15 +1,24 @@
 import initSqlJs from 'sql.js';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const DB_PATH = join(__dirname, 'clockwize.db');
+import { DB_PATH, IN_MEMORY_DB } from './paths.js';
 
 let db = null;
+
+// Write to a temp file and rename it over the database, so a crash or power loss mid-write
+// can never leave a half-written (corrupt) clockwize.db behind
+function writeFileAtomically(file, buffer) {
+  const tmp = `${file}.tmp-${process.pid}`;
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, buffer);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, file);
+}
 
 // Wrapper to provide better-sqlite3 like API
 class Database {
@@ -107,12 +116,22 @@ class Database {
     return false;
   }
 
+  // sql.js keeps the database in memory, so every save rewrites the whole file. Saves are
+  // coalesced: all the writes of one request (one tick) cost a single file write.
   save() {
+    if (IN_MEMORY_DB || this.saveScheduled) return;
+    this.saveScheduled = true;
+    setImmediate(() => this.flush());
+  }
+
+  // Writes pending changes now. Also runs on process exit so nothing is lost on shutdown.
+  flush() {
+    if (!this.saveScheduled) return;
+    this.saveScheduled = false;
     const data = this.db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(DB_PATH, buffer);
     // export() closes and reopens the connection, which resets PRAGMA foreign_keys to OFF
     this.pragma('foreign_keys = ON');
+    writeFileAtomically(DB_PATH, Buffer.from(data));
   }
 }
 
@@ -120,7 +139,7 @@ async function initDatabase() {
   const SQL = await initSqlJs();
 
   let sqlJsDb;
-  if (fs.existsSync(DB_PATH)) {
+  if (!IN_MEMORY_DB && fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH);
     sqlJsDb = new SQL.Database(buffer);
   } else {
@@ -128,6 +147,8 @@ async function initDatabase() {
   }
 
   db = new Database(sqlJsDb);
+  // Flush before anything else on exit (e.g. before the db lock is released)
+  if (!IN_MEMORY_DB) process.prependListener('exit', () => db.flush());
 
   // Enable foreign keys
   db.pragma('foreign_keys = ON');
@@ -663,6 +684,18 @@ async function initDatabase() {
         INSERT INTO users (id, email, password, name, is_admin)
         VALUES (?, ?, ?, ?, 1)
       `).run(adminId, adminEmail, hashedPassword, 'Admin');
+
+      // The personal-workspace migration above already ran, so give the admin one here -
+      // otherwise a fresh install has an admin that can't use anything until the next restart
+      const workspaceId = uuidv4();
+      db.prepare(`
+        INSERT INTO workspaces (id, name, slug, created_by)
+        VALUES (?, ?, ?, ?)
+      `).run(workspaceId, 'Admin', `personal-${adminId.substring(0, 8)}`, adminId);
+      db.prepare(`
+        INSERT INTO workspace_members (id, workspace_id, user_id, role)
+        VALUES (?, ?, ?, 'owner')
+      `).run(uuidv4(), workspaceId, adminId);
 
       console.log('✅ Admin user created (user: admin, pass: admin)');
     }

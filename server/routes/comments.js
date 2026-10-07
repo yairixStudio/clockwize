@@ -235,6 +235,10 @@ router.put('/:id', (req, res) => {
     const { id } = req.params;
     const { content } = req.body;
 
+    if (!content) {
+      return res.status(400).json({ error: 'Content is required' });
+    }
+
     const comment = db.prepare('SELECT * FROM comments WHERE id = ? AND workspace_id = ?').get(id, req.workspaceId);
     if (!comment) {
       return res.status(404).json({ error: 'Comment not found' });

@@ -7,6 +7,17 @@ const router = express.Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// Referenced project / category must belong to the workspace (otherwise their names leak through the joins)
+const findForeignReference = (db, workspaceId, { project_id, category_id }) => {
+  if (project_id && !db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, workspaceId)) {
+    return 'Project not found';
+  }
+  if (category_id && !db.prepare('SELECT id FROM expense_categories WHERE id = ? AND workspace_id = ?').get(category_id, workspaceId)) {
+    return 'Category not found';
+  }
+  return null;
+};
+
 // Get all expense categories
 router.get('/categories', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -179,6 +190,11 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
+    const foreignError = findForeignReference(db, req.workspaceId, { project_id, category_id });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     const id = uuidv4();
     const createdAt = new Date().toISOString();
 
@@ -229,6 +245,15 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'Expense not found' });
+    }
+
+    // Only values that change are checked, so a stale stored reference does not block edits
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      project_id: project_id !== existing.project_id ? project_id : null,
+      category_id: category_id !== existing.category_id ? category_id : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     db.prepare(`

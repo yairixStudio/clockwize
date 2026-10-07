@@ -19,13 +19,23 @@ export const authMiddleware = (req, res, next) => {
 
   const token = authHeader.split(' ')[1];
   
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (error) {
     return res.status(401).json({ error: 'טוקן לא תקין' });
   }
+
+  // A valid signature is not enough: deleted or suspended users lose access right away,
+  // not when their 30-day token expires. 401 makes the client sign out.
+  const db = req.app?.locals?.db;
+  const user = db?.prepare('SELECT is_active FROM users WHERE id = ?').get(decoded.userId);
+  if (db && (!user || user.is_active === 0)) {
+    return res.status(401).json({ error: 'אנא התחבר למערכת' });
+  }
+
+  req.userId = decoded.userId;
+  next();
 };
 
 // Workspace context middleware - adds workspaceId and workspaceRole to request

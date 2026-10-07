@@ -8,6 +8,10 @@ const router = Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// A client source must be global (workspace_id NULL) or belong to the current workspace
+const isSourceAvailable = (db, sourceId, workspaceId) =>
+  !sourceId || !!db.prepare('SELECT id FROM client_sources WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL)').get(sourceId, workspaceId);
+
 // Domain lookup for Chrome extension - MUST BE BEFORE /:id route!
 router.get('/lookup/domain', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -223,6 +227,10 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(400).json({ error: 'שם לקוח נדרש' });
     }
 
+    if (!isSourceAvailable(db, source_id, req.workspaceId)) {
+      return res.status(404).json({ error: 'מקור לא נמצא' });
+    }
+
     const id = uuidv4();
     // Store aliases and domains as JSON strings
     const aliasesJson = aliases && Array.isArray(aliases) ? JSON.stringify(aliases) : null;
@@ -287,6 +295,10 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(404).json({ error: 'לקוח לא נמצא' });
     }
 
+    if (!isSourceAvailable(db, source_id, req.workspaceId)) {
+      return res.status(404).json({ error: 'מקור לא נמצא' });
+    }
+
     // Handle aliases and domains - store as JSON strings
     const aliasesJson = aliases !== undefined
       ? (Array.isArray(aliases) ? JSON.stringify(aliases) : null)
@@ -302,15 +314,16 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       WHERE id = ? AND workspace_id = ?
     `).run(
       name || existing.name,
-      address || null,
-      phone || null,
-      email || null,
-      bank_name || null,
-      bank_account || null,
-      bank_branch || null,
-      tax_id || null,
-      notes || null,
-      hourly_rate || null,
+      // Fields missing from the body keep their stored value (partial updates, e.g. rename)
+      address !== undefined ? (address || null) : existing.address,
+      phone !== undefined ? (phone || null) : existing.phone,
+      email !== undefined ? (email || null) : existing.email,
+      bank_name !== undefined ? (bank_name || null) : existing.bank_name,
+      bank_account !== undefined ? (bank_account || null) : existing.bank_account,
+      bank_branch !== undefined ? (bank_branch || null) : existing.bank_branch,
+      tax_id !== undefined ? (tax_id || null) : existing.tax_id,
+      notes !== undefined ? (notes || null) : existing.notes,
+      hourly_rate !== undefined ? (hourly_rate || null) : existing.hourly_rate,
       status || existing.status || 'active',
       is_favorite !== undefined ? (is_favorite ? 1 : 0) : existing.is_favorite,
       morning_id !== undefined ? morning_id : existing.morning_id,

@@ -224,6 +224,11 @@ router.put('/:id/members/:memberId', authMiddleware, workspaceMiddleware, (req, 
       return res.status(403).json({ error: 'רק הבעלים יכול למנות מנהלים' });
     }
 
+    // ...nor demote a fellow admin (that would side-step the rule that admins remove members only)
+    if (req.workspaceRole === 'admin' && member.role === 'admin') {
+      return res.status(403).json({ error: 'רק הבעלים יכול לשנות תפקיד של מנהל' });
+    }
+
     db.prepare('UPDATE workspace_members SET role = ? WHERE id = ?').run(role, req.params.memberId);
 
     res.json({ message: 'תפקיד עודכן בהצלחה' });

@@ -59,7 +59,7 @@ router.get('/check/:projectId', (req, res) => {
     const totalEarnings = project.pricing_type === 'fixed' ? (project.fixed_price || 0) : totalHours * hourlyRate;
 
     const totalPayments = db.prepare(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE project_id = ? AND status = 'paid'"
+      "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE project_id = ? AND (type IS NULL OR type = 'income') AND status = 'paid'"
     ).get(projectId);
 
     // Get all non-dismissed alerts

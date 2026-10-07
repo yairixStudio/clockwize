@@ -188,6 +188,10 @@ router.put('/', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     const { addons } = req.body; // מערך של { id, isEnabled }
     
+    if (!Array.isArray(addons)) {
+      return res.status(400).json({ error: 'נדרש מערך תוספים' });
+    }
+    
     for (const addon of addons) {
       // בדיקה שהתוסף קיים
       const addonExists = AVAILABLE_ADDONS.find(a => a.id === addon.id);
@@ -224,7 +228,8 @@ router.put('/', authMiddleware, workspaceMiddleware, (req, res) => {
 
 // Helper function to mask sensitive values for display
 function maskSensitiveValue(value) {
-  if (!value || value.length < 8) return '****';
+  // Short secrets (passwords, tokens) are fully hidden - first+last 4 would reveal most of them
+  if (!value || value.length < 16) return '****';
   return value.substring(0, 4) + '****' + value.substring(value.length - 4);
 }
 

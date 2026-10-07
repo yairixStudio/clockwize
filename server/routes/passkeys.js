@@ -1,8 +1,5 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -10,29 +7,26 @@ import {
   verifyAuthenticationResponse
 } from '@simplewebauthn/server';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const LOCAL_SESSION_FILE = path.join(__dirname, '..', '..', '.local-session');
+import { saveLocalSession } from '../utils/localSession.js';
 
 const router = Router();
 
 const RP_NAME = 'Clockwize';
 const RP_ID = process.env.RP_ID || 'localhost';
-const EXPECTED_ORIGINS = process.env.RP_ORIGINS
+const CONFIGURED_ORIGINS = process.env.RP_ORIGINS
   ? process.env.RP_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
-  : ['http://localhost:5001', 'http://localhost:5002', 'http://localhost:5173', 'http://localhost:3000'];
+  : null;
+
+// Without RP_ORIGINS (local use) any http://localhost:<port> is fine: the server picks the next
+// free port when 3000 is busy, and Vite / the desktop app / a browser tab all use different ones
+const LOCAL_ORIGIN = /^http:\/\/localhost(:\d{1,5})?$/;
+const expectedOrigins = (req) => {
+  if (CONFIGURED_ORIGINS) return CONFIGURED_ORIGINS;
+  const origin = req.headers.origin;
+  return origin && LOCAL_ORIGIN.test(origin) ? [origin] : ['http://localhost:3000'];
+};
 
 const getDb = (req) => req.app.locals.db;
-
-// Session file shared with the menu-bar app (same as auth.js login)
-const saveLocalSession = (token, workspaceId) => {
-  try {
-    fs.writeFileSync(LOCAL_SESSION_FILE, JSON.stringify({ token, workspaceId }));
-  } catch (e) {
-    console.error('Failed to save local session:', e);
-  }
-};
 
 // Short-lived WebAuthn challenge store: flowId -> { challenge, userId?, pendingUser?, expiresAt }
 const FLOW_TTL_MS = 5 * 60 * 1000;
@@ -186,7 +180,7 @@ router.post('/signup/verify', async (req, res) => {
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: flow.challenge,
-      expectedOrigin: EXPECTED_ORIGINS,
+      expectedOrigin: expectedOrigins(req),
       expectedRPID: RP_ID
     });
 
@@ -264,7 +258,7 @@ router.post('/login/verify', async (req, res) => {
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: flow.challenge,
-      expectedOrigin: EXPECTED_ORIGINS,
+      expectedOrigin: expectedOrigins(req),
       expectedRPID: RP_ID,
       credential: {
         id: passkey.credential_id,
@@ -343,7 +337,7 @@ router.post('/verify', authMiddleware, async (req, res) => {
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: flow.challenge,
-      expectedOrigin: EXPECTED_ORIGINS,
+      expectedOrigin: expectedOrigins(req),
       expectedRPID: RP_ID
     });
 

@@ -10,6 +10,23 @@ const getDb = (req) => req.app.locals.db;
 router.use(authMiddleware);
 router.use(workspaceMiddleware);
 
+// The record a reminder points at (and every linked project) must belong to the workspace -
+// GET joins their names into the response
+const ASSOCIATION_TABLES = { client: 'clients', project: 'projects', task: 'tasks', lead: 'leads' };
+
+const findForeignAssociation = (db, workspaceId, associationType, associationId, projectIds) => {
+  const table = ASSOCIATION_TABLES[associationType];
+  if (table && associationId) {
+    const record = db.prepare(`SELECT id FROM ${table} WHERE id = ? AND workspace_id = ?`).get(associationId, workspaceId);
+    if (!record) return 'הרשומה המשויכת לא נמצאה';
+  }
+  for (const projectId of Array.isArray(projectIds) ? projectIds : []) {
+    const project = db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(projectId, workspaceId);
+    if (!project) return 'פרויקט לא נמצא';
+  }
+  return null;
+};
+
 // Get all reminders
 router.get('/', (req, res) => {
   try {
@@ -117,12 +134,17 @@ router.post('/', (req, res) => {
     // Convert empty string to null for association_id
     const cleanAssociationId = association_id || null;
 
+    const foreignError = findForeignAssociation(db, req.workspaceId, association_type, cleanAssociationId, project_ids);
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     db.prepare(`
       INSERT INTO reminders (
         id, user_id, workspace_id, content, notes, due_date, association_type, association_id, is_recurring, recurrence_interval
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, req.userId, req.workspaceId, content, notes || null, due_date, association_type, cleanAssociationId, is_recurring ? 1 : 0, recurrence_interval
+      id, req.userId, req.workspaceId, content, notes || null, due_date || null, association_type, cleanAssociationId, is_recurring ? 1 : 0, recurrence_interval || null
     );
 
     // Create project associations if project_ids provided
@@ -165,6 +187,19 @@ router.put('/:id', (req, res) => {
     const reminder = db.prepare('SELECT * FROM reminders WHERE id = ? AND workspace_id = ?').get(id, req.workspaceId);
     if (!reminder) {
       return res.status(404).json({ error: 'תזכורת לא נמצאה' });
+    }
+
+    // Only check what changes - a reminder whose stored association went stale stays editable
+    const newType = updates.association_type !== undefined ? updates.association_type : reminder.association_type;
+    const newAssociationId = updates.association_id !== undefined ? (updates.association_id || null) : reminder.association_id;
+    const associationChanged = newType !== reminder.association_type || newAssociationId !== reminder.association_id;
+    const linkedProjectIds = db.prepare('SELECT project_id FROM reminder_associations WHERE reminder_id = ?').all(id).map(a => a.project_id);
+    const addedProjectIds = Array.isArray(updates.project_ids) ? updates.project_ids.filter(p => !linkedProjectIds.includes(p)) : [];
+    const foreignError = findForeignAssociation(
+      db, req.workspaceId, newType, associationChanged ? newAssociationId : null, addedProjectIds
+    );
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     // Handle recurring logic when marking as read (is_read = 1)

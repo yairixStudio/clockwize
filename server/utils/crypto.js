@@ -71,7 +71,8 @@ function decryptWithSecret(encryptedText, salt, secret) {
         const iv = Buffer.from(ivHex, 'hex');
         const tag = Buffer.from(tagHex, 'hex');
 
-        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+        // Pin the tag length - otherwise GCM accepts a truncated (forgeable) 4-byte tag
+        const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH });
         decipher.setAuthTag(tag);
 
         let decrypted = decipher.update(encrypted, 'hex', 'utf8');
