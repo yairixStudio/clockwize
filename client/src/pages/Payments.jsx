@@ -279,6 +279,7 @@ function Payments() {
           <input
             type="text"
             className="form-input search-input"
+            aria-label="חיפוש תשלומים"
             placeholder="חיפוש..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -287,6 +288,7 @@ function Payments() {
 
         <select
           className="form-input filter-select"
+          aria-label="סינון לפי לקוח"
           value={clientFilter}
           onChange={e => setClientFilter(e.target.value)}
         >
@@ -298,6 +300,7 @@ function Payments() {
 
         <select
           className="form-input filter-select"
+          aria-label="סינון לפי פרויקט"
           value={projectFilter}
           onChange={e => setProjectFilter(e.target.value)}
         >
@@ -310,6 +313,7 @@ function Payments() {
         {activeTab !== 'recurring' && (
           <select
             className="form-input filter-select"
+            aria-label="סינון לפי סטטוס"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
           >
@@ -320,20 +324,24 @@ function Payments() {
           </select>
         )}
 
-        <input
-          type="date"
-          className="form-input date-input"
-          value={dateRange.start}
-          onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-          placeholder="מתאריך"
-        />
-        <input
-          type="date"
-          className="form-input date-input"
-          value={dateRange.end}
-          onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-          placeholder="עד תאריך"
-        />
+        <label className="filter-field">
+          מתאריך
+          <input
+            type="date"
+            className="form-input date-input"
+            value={dateRange.start}
+            onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+          />
+        </label>
+        <label className="filter-field">
+          עד תאריך
+          <input
+            type="date"
+            className="form-input date-input"
+            value={dateRange.end}
+            onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+          />
+        </label>
       </div>
 
       {/* Content */}

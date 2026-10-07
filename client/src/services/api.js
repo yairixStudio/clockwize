@@ -59,6 +59,13 @@ export const authAPI = {
       body: JSON.stringify(data)
     }).then(handleResponse),
 
+  desktopHandoff: () =>
+    fetch(`${API_BASE}/auth/desktop-handoff`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ workspaceId: localStorage.getItem('currentWorkspaceId') })
+    }).then(handleResponse),
+
   getMe: () =>
     fetch(`${API_BASE}/auth/me`, { headers: getHeaders() }).then(handleResponse),
 
@@ -855,9 +862,11 @@ export const filesAPI = {
 
   download: (fileId) => {
     const token = localStorage.getItem('token');
+    const workspaceId = localStorage.getItem('currentWorkspaceId');
     return fetch(`${API_BASE}/files/${fileId}/download`, {
       headers: {
-        ...(token && { Authorization: `Bearer ${token}` })
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(workspaceId && { 'X-Workspace-Id': workspaceId })
       }
     }).then(response => {
       if (!response.ok) throw new Error('Failed to download');

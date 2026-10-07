@@ -86,8 +86,10 @@ function Register() {
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label">שם מלא</label>
+          <label className="form-label" htmlFor="register-name">שם מלא</label>
           <input
+            id="register-name"
+            autoComplete="name"
             type="text"
             className="form-input"
             value={name}
@@ -98,8 +100,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">אימייל</label>
+          <label className="form-label" htmlFor="register-email">אימייל</label>
           <input
+            id="register-email"
+            autoComplete="email"
             type="email"
             className="form-input"
             value={email}
@@ -111,8 +115,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">סיסמה</label>
+          <label className="form-label" htmlFor="register-password">סיסמה</label>
           <input
+            id="register-password"
+            autoComplete="new-password"
             type="password"
             className="form-input"
             value={password}
@@ -124,8 +130,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">אימות סיסמה</label>
+          <label className="form-label" htmlFor="register-password-confirm">אימות סיסמה</label>
           <input
+            id="register-password-confirm"
+            autoComplete="new-password"
             type="password"
             className="form-input"
             value={confirmPassword}

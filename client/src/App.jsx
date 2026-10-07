@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { authAPI } from './services/api';
 import useStore from './store/useStore';
 import { ModalProvider } from './components/Modal';
 import { TimerSyncProvider } from './components/TimerSyncProvider';
@@ -75,8 +76,36 @@ const GuestRoute = ({ children }) => {
     );
   }
 
+  if (isAuthenticated && new URLSearchParams(window.location.search).get('passkey') === 'desktop') {
+    return <DesktopHandoff />;
+  }
+
   return !isAuthenticated ? children : <Navigate to="/" replace />;
 };
+
+// The desktop app sent the user here to sign in with a passkey, but this browser is already
+// signed in: pass the session over instead of asking again
+function DesktopHandoff() {
+  const [status, setStatus] = useState('working');
+
+  useEffect(() => {
+    authAPI.desktopHandoff()
+      .then(() => setStatus('done'))
+      .catch(() => setStatus('failed'));
+  }, []);
+
+  return (
+    <div className="desktop-handoff" role="status">
+      <h1>Clockwize</h1>
+      <p>
+        {status === 'working' && 'מעביר את ההתחברות לאפליקציה…'}
+        {status === 'done' && 'האפליקציה מחוברת. אפשר לסגור את הלשונית ולחזור ל-Clockwize.'}
+        {status === 'failed' && 'ההעברה לא הצליחה. נסו להתחבר מחדש באפליקציה.'}
+      </p>
+      {status !== 'working' && <Link to="/" className="btn btn-secondary">להמשיך בדפדפן</Link>}
+    </div>
+  );
+}
 
 function App() {
   const { initAuth } = useStore();
@@ -88,7 +117,10 @@ function App() {
   // Auth bridge for Chrome extension
   useEffect(() => {
     const handleMessage = (event) => {
-      if (event.data?.type === 'GET_AUTH_TOKEN') {
+      // Only the Clockwize side panel (an extension page framing this app) may ask for the token -
+      // any other window that opens or frames the app must not be able to read it
+      const fromExtensionParent = event.origin.startsWith('chrome-extension://') && event.source === window.parent && window.parent !== window;
+      if (event.data?.type === 'GET_AUTH_TOKEN' && fromExtensionParent) {
         const token = localStorage.getItem('token');
         const workspaceId = localStorage.getItem('currentWorkspaceId');
         event.source?.postMessage({

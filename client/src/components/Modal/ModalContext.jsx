@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import CustomModal from './CustomModal';
 
 const ModalContext = createContext(null);
@@ -116,7 +116,8 @@ export function ModalProvider({ children }) {
     });
   }, [closeModal]);
 
-  const value = {
+  // Stable identity: consumers list `modal` in effect deps, and opening a modal re-renders this provider
+  const value = useMemo(() => ({
     alert,
     success,
     error,
@@ -124,7 +125,7 @@ export function ModalProvider({ children }) {
     confirm,
     prompt,
     closeModal
-  };
+  }), [alert, success, error, warning, confirm, prompt, closeModal]);
 
   return (
     <ModalContext.Provider value={value}>

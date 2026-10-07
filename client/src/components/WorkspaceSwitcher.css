@@ -4,7 +4,7 @@
 }
 
 .workspace-switcher.expanded {
-  z-index: 9999;
+  z-index: var(--z-popover);
 }
 
 /* Avatar button for collapsed mode - matches expanded trigger design */
@@ -146,7 +146,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  z-index: 9999;
+  z-index: var(--z-popover);
   padding: 8px 0;
   animation: slideUp 0.15s ease;
 }
@@ -332,7 +332,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10000;
+  z-index: var(--z-modal);
   animation: fadeIn 0.15s ease;
 }
 
@@ -441,7 +441,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 9998;
+  z-index: var(--z-overlay);
   background: transparent;
 }
 
@@ -456,7 +456,7 @@
   width: auto;
   max-height: calc(100vh - 40px);
   overflow-y: auto;
-  z-index: 9999;
+  z-index: var(--z-popover);
   animation: slideInFromRight 0.15s ease;
 }
 

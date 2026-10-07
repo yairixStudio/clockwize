@@ -93,7 +93,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  z-index: 1000;
+  z-index: var(--z-dropdown);
   overflow: hidden;
 }
 

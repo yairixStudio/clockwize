@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Clock, Calendar, Folder, Tag, Search, Filter, Play, Pause, Square, Plus, ChevronDown, ChevronUp } from 'lucide-react';
@@ -287,8 +287,8 @@ function TimeEntries() {
                   const isExpanded = expandedEntries.has(entry.id);
 
                   return (
-                    <>
-                      <tr key={entry.id} className={isExpanded ? 'expanded-row' : ''}>
+                    <Fragment key={entry.id}>
+                      <tr className={isExpanded ? 'expanded-row' : ''}>
                         <td>
                           <div className="entry-project">
                             <button
@@ -321,15 +321,16 @@ function TimeEntries() {
                             <Calendar size={14} />
                             {formatDate(entry.start_time)}
                           </div>
-                          <div className="entry-time text-muted">
-                            {new Date(entry.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })} - 
-                            {entry.end_time ? new Date(entry.end_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '...'}
+                          <div className="entry-time text-muted" dir="ltr">
+                            {new Date(entry.start_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                            {' – '}
+                            {entry.end_time ? new Date(entry.end_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '…'}
                           </div>
                         </td>
                         <td className="font-mono font-medium">
                           {formatDurationHuman(entry.duration)}
                         </td>
-                        <td className="entry-notes">
+                        <td className={`entry-notes${entry.notes ? '' : ' is-empty'}`}>
                           {entry.notes || '-'}
                         </td>
                         <td>
@@ -354,13 +355,13 @@ function TimeEntries() {
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr key={`${entry.id}-intervals`} className="intervals-row">
+                        <tr className="intervals-row">
                           <td colSpan={5}>
                             <IntervalsDisplay entryId={entry.id} />
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

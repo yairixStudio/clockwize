@@ -134,8 +134,9 @@
 
 /* Filters */
 .payments-filters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  align-items: end;
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding: 1rem;
@@ -145,16 +146,21 @@
 }
 
 .payments-filters .search-box {
-  flex: 1;
-  min-width: 200px;
+  grid-column: span 2;
 }
 
-.filter-select {
-  min-width: 150px;
+.payments-filters .filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
-.date-input {
-  width: 140px;
+@media (max-width: 480px) {
+  .payments-filters .search-box {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Content */

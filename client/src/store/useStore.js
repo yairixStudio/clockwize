@@ -152,7 +152,8 @@ const useStore = create((set, get) => ({
       // Clear cached data that's workspace-specific
       dashboardStats: null,
       activeTimers: [],
-      reminders: []
+      reminders: [],
+      unreadRemindersCount: 0
     });
     // Reload workspace-specific data
     get().loadActiveTimers();

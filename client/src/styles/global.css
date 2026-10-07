@@ -47,6 +47,70 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
   --shadow-glow: 0 0 20px var(--accent-glow);
+
+  /* Spacing scale - use these for paddings/gaps instead of one-off values */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Layers - every z-index in the app should come from this scale */
+  --z-raised: 10;
+  --z-sticky: 200;
+  --z-titlebar: 250;
+  --z-floating: 300;
+  --z-dropdown: 400;
+  --z-overlay: 1000;
+  --z-modal: 1010;
+  --z-popover: 1020;
+  --z-toast: 1100;
+
+  /* Height of the hidden title bar in the desktop app (0 in the browser) */
+  --titlebar-height: 0px;
+}
+
+/* ===== Desktop app (Electron on macOS) =====
+   The window has a hidden, inset title bar: content runs under it, a fixed strip drags the
+   window, and the traffic lights (top-left) get room. main.jsx adds .is-desktop. */
+.is-desktop {
+  --titlebar-height: 36px;
+}
+
+.is-desktop body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Heebo', sans-serif;
+}
+
+.desktop-titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--titlebar-height);
+  -webkit-app-region: drag;
+  z-index: var(--z-titlebar);
+}
+
+/* Keyboard focus is always visible; mouse clicks don't leave rings behind.
+   An outline follows each element's own rounded corners and leaves its shadows alone. */
+:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Text fields already show focus with their border glow */
+.form-input:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
@@ -680,7 +744,7 @@ body.modal-open {
   bottom: 0;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(2px);
-  z-index: 9999;
+  z-index: var(--z-modal);
   animation: modalOverlayIn 0.2s ease;
   overscroll-behavior: contain;
   overflow-y: auto;
@@ -1013,7 +1077,7 @@ tr:hover td {
   margin-top: 4px;
   max-height: 250px;
   overflow-y: auto;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   box-shadow: var(--shadow-md);
 }
 
@@ -1125,4 +1189,36 @@ tr:hover td {
 
 .project-tag .tag-remove:hover {
   color: var(--error);
+}
+/* ===== Page toolbar (search + primary action on one row) ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.toolbar .search-box {
+  flex: 1 1 260px;
+  max-width: 480px;
+}
+
+/* ===== Search boxes: icon on the start side (right in RTL), text clears it ===== */
+.search-box {
+  position: relative;
+}
+
+.search-box .search-icon {
+  position: absolute;
+  inset-inline-start: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-box .search-input,
+.search-box .form-input {
+  padding-inline-start: 2.5rem;
 }

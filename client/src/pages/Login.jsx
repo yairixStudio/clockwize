@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { KeyRound } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import useStore from '../store/useStore';
@@ -18,6 +18,12 @@ function Login() {
   const { login, completeAuth } = useStore();
   const navigate = useNavigate();
   const modal = useModal();
+  const [searchParams] = useSearchParams();
+  // The desktop app can't show the macOS passkey sheet, so it hands passkey sign-in to the
+  // default browser (?passkey=desktop) and picks the session up from the server afterwards
+  const desktop = window.clockwizeDesktop;
+  const forDesktopApp = searchParams.get('passkey') === 'desktop';
+  const [browserLoginPending, setBrowserLoginPending] = useState(false);
 
   const navigateAfterAuth = () => {
     const pendingInviteCode = localStorage.getItem('pendingInviteCode');
@@ -49,6 +55,16 @@ function Login() {
     }
   };
   
+  const handlePasskeyClick = () => {
+    if (desktop?.openBrowserLogin) {
+      setError('');
+      setBrowserLoginPending(true);
+      desktop.openBrowserLogin();
+      return;
+    }
+    handlePasskeyLogin();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -143,8 +159,10 @@ function Login() {
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label">שם משתמש / אימייל</label>
+          <label className="form-label" htmlFor="login-email">שם משתמש / אימייל</label>
           <input
+            id="login-email"
+            autoComplete="username"
             type="text"
             className="form-input"
             value={email}
@@ -163,8 +181,10 @@ function Login() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">סיסמה</label>
+          <label className="form-label" htmlFor="login-password">סיסמה</label>
           <input
+            id="login-password"
+            autoComplete="current-password"
             type="password"
             className="form-input"
             value={password}
@@ -192,18 +212,33 @@ function Login() {
         </button>
       </form>
 
-      {browserSupportsWebAuthn() && (
+      {(browserSupportsWebAuthn() || desktop?.openBrowserLogin) && (
         <>
           <div className="auth-divider"><span>או</span></div>
+          {forDesktopApp && (
+            <p className="auth-hint" role="status">
+              התחברות עבור אפליקציית Clockwize: לחצו על הכפתור ואשרו עם Touch ID. האפליקציה תתחבר לבד.
+            </p>
+          )}
           <button
             type="button"
-            className="btn btn-secondary btn-lg auth-passkey-btn"
-            onClick={handlePasskeyLogin}
+            className={`btn btn-lg auth-passkey-btn ${forDesktopApp ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={handlePasskeyClick}
             disabled={passkeyLoading}
+            autoFocus={forDesktopApp}
           >
             <KeyRound size={18} />
-            <span>{passkeyLoading ? 'ממתין לאימות...' : 'התחבר עם Passkey'}</span>
+            <span>
+              {passkeyLoading
+                ? 'ממתין לאימות...'
+                : browserLoginPending ? 'ממשיכים בדפדפן…' : 'התחבר עם Passkey'}
+            </span>
           </button>
+          {browserLoginPending && (
+            <p className="auth-hint" role="status">
+              נפתח דפדפן להתחברות עם Passkey. אחרי האישור שם, Clockwize יתחבר כאן אוטומטית.
+            </p>
+          )}
         </>
       )}
 

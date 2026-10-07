@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useOutletContext } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Users, Folder, Play, Pause, Square, X, ChevronRight, ChevronDown, Clock, Plus, MessageSquare, Search, CheckCircle2, ExternalLink, Circle, CircleCheck, Star, GripVertical, MoreVertical } from 'lucide-react';
 import useStore from '../store/useStore';
 import { clientsAPI, projectsAPI, tasksAPI, timerAPI } from '../services/api';
@@ -29,6 +29,27 @@ const readStoredJSON = (key, fallback) => {
     return fallback;
   }
 };
+
+// A link inside a card that is itself a link: <a> can't nest, so this one navigates by hand
+function CardMetaLink({ to, children }) {
+  const navigate = useNavigate();
+  const go = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(to);
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      className="task-card-meta-item task-card-meta-link"
+      onClick={go}
+      onKeyDown={(e) => { if (e.key === 'Enter') go(e); }}
+    >
+      {children}
+    </span>
+  );
+}
 
 function Dashboard() {
   const { user, dashboardStats, loadDashboardStats, startTimer, pauseTimer, resumeTimer, stopTimer, discardTimer, activeTimers, getTimerForProject } = useStore();
@@ -995,24 +1016,16 @@ function Dashboard() {
                     </div>
                     <div className="task-card-meta">
                       {task.clientName && (
-                        <Link 
-                          to={`/clients/${task.clientId}`}
-                          className="task-card-meta-item task-card-meta-link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <CardMetaLink to={`/clients/${task.clientId}`}>
                           <Users size={12} />
                           <span>{task.clientName}</span>
-                        </Link>
+                        </CardMetaLink>
                       )}
                       {task.projectName && (
-                        <Link 
-                          to={`/projects/${task.projectId}`}
-                          className="task-card-meta-item task-card-meta-link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <CardMetaLink to={`/projects/${task.projectId}`}>
                           <Folder size={12} />
                           <span>{task.projectName}</span>
-                        </Link>
+                        </CardMetaLink>
                       )}
                     </div>
                     {task.due_date && (
@@ -1135,14 +1148,10 @@ function Dashboard() {
                       </div>
                     <div className="task-card-meta">
                       {client && (
-                        <Link 
-                          to={`/clients/${client.id}`}
-                          className="task-card-meta-item task-card-meta-link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <CardMetaLink to={`/clients/${client.id}`}>
                           <Users size={12} />
                           <span>{client.name}</span>
-                        </Link>
+                        </CardMetaLink>
                       )}
                       {projectTimer && (
                         <div className="task-card-meta-item">

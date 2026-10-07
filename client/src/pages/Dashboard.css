@@ -1354,3 +1354,24 @@
 .task-card:hover .project-card-menu-btn {
   opacity: 1;
 }
+
+/* Carousel edges fade out, so a half-visible card reads as "more this way" and the arrows
+   sit over the faded strip instead of on top of card text */
+.tasks-carousel {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+  mask-image: linear-gradient(to left, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+  padding-inline: 12px;
+  scroll-padding-inline: 12px;
+}
+
+@media (max-width: 480px) {
+  /* Keep the page dots on one line */
+  .carousel-dot {
+    width: 20px;
+    height: 24px;
+  }
+
+  .carousel-dots {
+    gap: 0.125rem;
+  }
+}

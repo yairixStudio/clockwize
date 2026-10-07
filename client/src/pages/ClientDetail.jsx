@@ -171,7 +171,7 @@ function ClientDetail() {
       }
     } catch (error) {
       console.error('Failed to load client:', error);
-      navigate('/clients');
+      navigate('/'); // the dashboard lists the clients
     } finally {
       setLoading(false);
     }
@@ -296,7 +296,7 @@ function ClientDetail() {
 
   const handleDeleteClient = async () => {
     try {
-      navigate('/clients');
+      navigate('/'); // the dashboard lists the clients
     } catch (error) {
       console.error('Error navigating after delete:', error);
     }
@@ -569,12 +569,14 @@ function ClientDetail() {
     }
 
     try {
-      // Create a time entry directly
+      // Create a time entry directly - the server needs real start/end times
+      const endTime = new Date();
       await timerAPI.createEntry({
         project_id: selectedProjectForTimer,
+        start_time: new Date(endTime.getTime() - totalSeconds * 1000).toISOString(),
+        end_time: endTime.toISOString(),
         duration: totalSeconds,
-        notes: clientTimerNotes,
-        date: new Date().toISOString()
+        notes: clientTimerNotes
       });
 
       // Clear the client timer
@@ -733,7 +735,7 @@ function ClientDetail() {
         <div className="breadcrumb">
           <BreadcrumbItem
             label="לקוחות"
-            to="/clients"
+            to="/"
             onLoadItems={loadAllClients}
           />
           <span>/</span>

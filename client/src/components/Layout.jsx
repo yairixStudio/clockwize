@@ -222,6 +222,8 @@ function Layout() {
         ref={sidebarRef}
         className={`sidebar ${isMobileSidebarOpen ? 'sidebar-open' : ''} ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${isResizing ? 'sidebar-resizing' : ''} mobile-sidebar`}
         style={!isMobile && !isSidebarCollapsed ? { width: `${sidebarWidth}px` } : undefined}
+        // Off-canvas on phones: keep the closed menu out of Tab order and screen readers
+        inert={isMobile && !isMobileSidebarOpen ? '' : undefined}
       >
         {/* Resize Handle */}
         {!isMobile && !isSidebarCollapsed && (
