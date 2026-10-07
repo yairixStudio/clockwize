@@ -18,6 +18,8 @@ server/clockwize.db
 server/clockwize.db-journal
 server/clockwize.db-wal
 server/clockwize.db-shm
+server/clockwize.db.lock
+*.db.lock
 server/uploads/*
 !server/uploads/.gitkeep
 backups/
@@ -45,3 +47,9 @@ coverage/
 # Local backups (e.g. old git history backup)
 .git.old-private-backup/
 .git.backup*/
+
+# Playwright e2e output (the e2e server's data lives in the OS temp dir)
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/

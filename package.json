@@ -6,12 +6,16 @@
     "dev": "concurrently -k \"npm run dev:server\" \"sleep 2 && npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "build": "cd client && npm run build"
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../desktop && npm install",
+    "build": "cd client && npm run build",
+    "test": "npm --prefix server test && npm --prefix client test && npm run test:e2e",
+    "test:e2e": "playwright test",
+    "test:desktop": "playwright test -c desktop/playwright.config.mjs",
+    "desktop": "npm --prefix desktop start",
+    "desktop:install": "npm --prefix desktop run install-app"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "concurrently": "^8.2.2"
   }
 }
-
-

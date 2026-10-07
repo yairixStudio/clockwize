@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A newer push to the same branch / PR cancels the run it supersedes
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client/package-lock.json
+
+      # Throwaway secrets, generated per run - nothing is stored in the repo or in GitHub secrets
+      # (server/tests/setup.js also generates its own; this keeps any test that skips it working)
+      - name: Generate test secrets
+        run: |
+          for name in JWT_SECRET ENCRYPTION_SECRET; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
+      - run: npm ci
+      - run: npm test
+
+  client:
+    name: Client tests & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client/package-lock.json
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: End-to-end (Playwright)
+    needs: [server, client]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
+
+      # The e2e server serves client/dist from the same origin as the API
+      - name: Build client
+        run: npm run build --prefix client
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # e2e/start-server.mjs generates its own random JWT/encryption secrets and points every
+      # data path at a temp dir, so the job needs no secrets or env setup
+      - name: Run e2e tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  desktop:
+    name: Desktop app (Electron, macOS)
+    needs: [server, client]
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+            client/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
+          npm ci --prefix desktop
+
+      - name: Build client
+        run: npm run build --prefix client
+
+      # Launches the real Electron app on a throwaway data dir: Dock icon visible, window loads,
+      # closing the window doesn't quit, the bundled API server answers
+      - name: Run desktop e2e tests
+        run: npm run test:desktop
+
+      - name: Upload desktop test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-test-results
+          path: desktop/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
