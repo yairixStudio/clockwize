@@ -30,7 +30,7 @@
 ## התקנה
 
 ```bash
-# התקנת כל התלויות (root + client + server)
+# התקנת כל התלויות (root + client + server + desktop)
 npm run install:all
 
 # יצירת קובץ הסביבה של השרת (חובה - השרת לא יעלה בלעדיו)
@@ -45,8 +45,39 @@ npm run dev
 
 ## כתובות
 
-- **Frontend:** http://localhost:5173
-- **Backend API:** http://localhost:3001
+- **Frontend (פיתוח):** http://localhost:5001 (Vite; פורט 5000 תפוס ב-macOS)
+- **Backend API:** http://localhost:3000 (אם תפוס - הפורט הפנוי הבא, נשמר ב-`.server-port`)
+
+## אפליקציית Desktop ל-macOS
+
+אפליקציה אמיתית עם חלון, אייקון ב-Dock, טיימר בשורת התפריט, ווידג'ט למרכז העדכונים ו-Control ל-Control Center / שורת התפריט.
+
+```bash
+npm run desktop:install   # בונה ומתקין את /Applications/Clockwize.app (מגבה את ה-DB לפני כן)
+npm run desktop           # הרצת פיתוח, בפרופיל נפרד ("Clockwize Dev") ליד האפליקציה המותקנת
+```
+
+- **השרת רץ בתוך האפליקציה** (Electron utilityProcess, ה-Node המובנה - אין צורך ב-Node במערכת), מתוך תיקיית הפרויקט, עם אותו `server/clockwize.db`, `server/.env` ו-`uploads/`. החלון טוען את ה-client הבנוי (`client/dist`) מאותו שרת - אחרי שינוי ב-client מספיק `npm run build`.
+- **שרת אחד לכל DB**: קובץ נעילה (`clockwize.db.lock`) מונע משני שרתים לדרוס זה את זה. אם `npm run dev` כבר רץ, האפליקציה מתחברת אליו; ו-`npm run dev` שמופעל כשהאפליקציה פתוחה מודיע על כך, וה-client של הפיתוח עובד מול השרת של האפליקציה.
+- **סגירת החלון לא מכבה** את האפליקציה (הטיימר ממשיך); לחיצה על האייקון ב-Dock מחזירה אותו, ו-⌘Q יוצא ועוצר את השרת.
+- **שורת התפריט**: לחיצה על השעון פותחת חלונית עם הטיימר החי, השהה/המשך/עצור, סיכום היום והשבוע והפעלה מהירה של עבודה אחרונה. קליק ימני - תפריט קצר.
+- **ווידג'ט ו-Control** (`desktop/widget`, WidgetKit): נבנים ונחתמים אוטומטית ב-`desktop:install` כשיש Xcode ותעודת חתימה במחזיק המפתחות; אחרת האפליקציה מותקנת בלעדיהם. הווידג'ט קורא את המצב מהאפליקציה דרך ערוץ מקומי (127.0.0.1) עם סוד שנוצר בכל התקנה, ולא מקבל את טוקן המשתמש.
+- **Passkey**: Electron לא יכול להציג את חלונית ה-Passkey של macOS, ולכן הכפתור באפליקציה פותח את ההתחברות בדפדפן; אחרי האישור שם האפליקציה מתחברת לבד.
+- **לוג השרת**: `~/Library/Logs/Clockwize/server.log` (גם מהתפריט Clockwize ← "פתח את קובץ הלוג של השרת").
+
+## בדיקות ו-CI
+
+```bash
+npm --prefix server test     # vitest + supertest על DB בזיכרון (כולל בידוד בין workspaces)
+npm --prefix client test     # vitest + Testing Library (utils, store, api, קומפוננטות)
+npm run build && npm run test:e2e   # Playwright מול שרת זמני (דסקטופ + מובייל)
+npm run test:desktop         # Playwright מול אפליקציית ה-Electron עצמה
+npm test                     # שרת + client + e2e
+```
+
+הבדיקות לעולם לא נוגעות בנתונים האמיתיים: כל הנתיבים ניתנים להחלפה במשתני סביבה (`CLOCKWIZE_DB_PATH`, `CLOCKWIZE_UPLOADS_DIR`, `CLOCKWIZE_BACKUP_DIR`, `CLOCKWIZE_PORT_FILE`, `CLOCKWIZE_SESSION_FILE`, `CLOCKWIZE_CLIENT_DIST` - ראו `server/paths.js`). לנתוני דמו לעבודת UI: `node server/scripts/seed-demo.js <url>` מול שרת על DB זמני.
+
+ה-CI (`.github/workflows/ci.yml`) מריץ בכל push: בדיקות שרת, בדיקות client ו-build, e2e ב-Playwright, ובדיקות אפליקציית ה-Desktop על macOS.
 
 ## הגדרות אבטחה (חובה לפני production)
 
@@ -155,8 +186,16 @@ clockwize/
 ├── server/                 # Node.js Backend
 │   ├── routes/             # API routes
 │   ├── middleware/         # Auth middleware
-│   ├── database.js         # SQLite setup
-│   └── index.js            # Express server
+│   ├── tests/              # vitest + supertest
+│   ├── app.js              # Express app (createApp)
+│   ├── database.js         # SQLite setup (sql.js, כתיבה אטומית)
+│   ├── paths.js            # כל נתיבי הנתונים (ניתנים להחלפה ב-env)
+│   └── index.js            # הפעלה: נעילת DB + האזנה לפורט
+├── desktop/                # אפליקציית macOS (Electron)
+│   ├── lib/                # שרת, טיימר, שורת תפריט, ערוץ לווידג'ט
+│   ├── widget/             # WidgetKit: ווידג'ט + Control
+│   └── tests/              # Playwright מול האפליקציה
+├── e2e/                    # Playwright מול הדפדפן
 └── package.json            # Root package.json
 ```
 
