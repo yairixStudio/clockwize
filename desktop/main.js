@@ -1,381 +1,402 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, Notification, shell } = require('electron');
-const path = require('path');
 const fs = require('fs');
-const https = require('http');
+const path = require('path');
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, shell, screen } = require('electron');
+const { resolveProjectRoot, saveProjectRoot, isProjectRoot, readAppConfig } = require('./lib/project-root');
+const { startServer } = require('./lib/server');
+const { createTimerState } = require('./lib/timer-state');
+const { createMenuBar } = require('./lib/tray');
+const { createWidgetFeed } = require('./lib/widget-feed');
 
-// Hide dock icon
-app.dock?.hide();
+// Clockwize desktop app: a regular Dock app with one window, a menu-bar timer, and the
+// API server running in a utility process next to it.
 
-let tray = null;
-let hasTrayIcon = false;
-let authWindow = null;
-let token = null;
-let workspaceId = null;
-let activeTimers = [];
-let pollInterval = null;
-let displayInterval = null;
+app.setName('Clockwize');
 
-// קובץ סשן משותף עם הדפדפן
-const LOCAL_SESSION_FILE = path.join(__dirname, '..', '.local-session');
-
-// טעינת הסשן מהקובץ המשותף (נכתב על ידי השרת אחרי התחברות בדפדפן)
-function loadLocalSession() {
-  try {
-    if (fs.existsSync(LOCAL_SESSION_FILE)) {
-      const data = JSON.parse(fs.readFileSync(LOCAL_SESSION_FILE, 'utf8'));
-      token = data.token;
-      workspaceId = data.workspaceId;
-      console.log('Loaded session from shared file');
-      return true;
-    }
-  } catch (e) {
-    console.error('Error loading local session:', e);
-  }
-  return false;
+// A development run (`npm start`) gets its own profile, logs and single-instance lock,
+// so it can run next to the installed app
+if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'Clockwize Dev'));
+  app.setAppLogsPath(path.join(app.getPath('home'), 'Library', 'Logs', 'Clockwize Dev'));
 }
 
-// בדיקה אם הסשן עדיין תקף
-async function validateSession() {
-  if (!token) return false;
-  
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
+let mainWindow = null;
+let serverChild = null;
+let serverPort = null;
+let projectRoot = null;
+let timerState = null;
+let menuBar = null;
+let quitting = false;
+
+const LOADING_PAGE = path.join(__dirname, 'loading.html');
+const serverLogFile = () => path.join(app.getPath('logs'), 'server.log');
+const appUrl = () => `http://localhost:${serverPort}`;
+const isAppUrl = (url) => {
+  if (!serverPort) return false;
   try {
-    await apiRequest('GET', '/auth/me');
-    return true;
-  } catch (e) {
-    console.log('Session invalid, clearing...');
-    token = null;
-    workspaceId = null;
+    const { hostname, port } = new URL(url);
+    return ['localhost', '127.0.0.1'].includes(hostname) && Number(port) === serverPort;
+  } catch {
     return false;
   }
-}
+};
 
-function clearSession() {
-  token = null;
-  workspaceId = null;
-}
+// ---------- Window ----------
 
-// API Functions - קריאת הפורט מהקובץ המסונכרן
-let API_PORT = 3000;
-let API_BASE = `http://localhost:${API_PORT}/api`;
+const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 
-function getServerPort() {
-  // קריאת הפורט מקובץ .server-port
-  const portFile = path.join(__dirname, '..', '.server-port');
+function loadWindowState() {
+  const fallback = { width: 1360, height: 860 };
   try {
-    if (fs.existsSync(portFile)) {
-      return parseInt(fs.readFileSync(portFile, 'utf8').trim(), 10);
-    }
-  } catch (e) {
-    console.log('Port file not found, using default');
-  }
-  return 3000;
-}
-
-async function initAPI() {
-  API_PORT = getServerPort();
-  API_BASE = `http://localhost:${API_PORT}/api`;
-  console.log(`Using API at port ${API_PORT}`);
-}
-
-function apiRequest(method, endpoint, body = null) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(API_BASE + endpoint);
-    const options = {
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname + url.search,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-        ...(workspaceId && { 'X-Workspace-Id': workspaceId })
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(json);
-          } else {
-            reject(new Error(json.error || 'API Error'));
-          }
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-
-    req.on('error', reject);
-    
-    if (body) {
-      req.write(JSON.stringify(body));
-    }
-    
-    req.end();
-  });
-}
-
-async function fetchActiveTimers() {
-  if (!token || !workspaceId) return;
-  
-  try {
-    activeTimers = await apiRequest('GET', '/timer/active');
-    updateTrayMenu();
-    updateTrayTitle();
-  } catch (e) {
-    console.error('Error fetching timers:', e);
+    const state = JSON.parse(fs.readFileSync(windowStateFile(), 'utf8'));
+    // Ignore a saved position that is no longer on any connected display
+    const visible = screen.getAllDisplays().some(({ workArea: a }) =>
+      state.x >= a.x - 50 && state.y >= a.y - 50 && state.x < a.x + a.width && state.y < a.y + a.height);
+    return visible ? state : { ...fallback, width: state.width, height: state.height };
+  } catch {
+    return fallback;
   }
 }
 
-async function pauseTimer(timerId) {
-  try {
-    await apiRequest('POST', `/timer/pause/${timerId}`);
-    await fetchActiveTimers();
-  } catch (e) {
-    console.error('Error pausing timer:', e);
-  }
+let saveStateTimer = null;
+function saveWindowState() {
+  clearTimeout(saveStateTimer);
+  saveStateTimer = setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isFullScreen()) return;
+    try {
+      fs.writeFileSync(windowStateFile(), JSON.stringify(mainWindow.getNormalBounds()));
+    } catch { /* not critical */ }
+  }, 400);
 }
 
-async function resumeTimer(timerId) {
-  try {
-    await apiRequest('POST', `/timer/resume/${timerId}`);
-    await fetchActiveTimers();
-  } catch (e) {
-    console.error('Error resuming timer:', e);
-  }
-}
-
-async function stopTimer(timerId) {
-  try {
-    await apiRequest('POST', `/timer/stop/${timerId}`, { notes: '' });
-    await fetchActiveTimers();
-    showNotification('Clockwize', 'הטיימר נשמר בהצלחה');
-  } catch (e) {
-    console.error('Error stopping timer:', e);
-  }
-}
-
-// Tray Functions
-function formatTime(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function calculateElapsed(timer) {
-  let elapsed = timer.accumulated_seconds || 0;
-  
-  if (timer.is_running && timer.start_time) {
-    const startTime = new Date(timer.start_time).getTime();
-    const now = Date.now();
-    elapsed += Math.floor((now - startTime) / 1000);
-  }
-  
-  return elapsed;
-}
-
-function updateTrayTitle() {
-  if (!tray) return;
-  
-  const primaryTimer = activeTimers[0];
-  
-  if (primaryTimer) {
-    const elapsed = calculateElapsed(primaryTimer);
-    const timeStr = formatTime(elapsed);
-    const icon = primaryTimer.is_running ? '🟢' : '🟡';
-    tray.setTitle(`${icon} ${timeStr}`);
-  } else {
-    tray.setTitle(hasTrayIcon ? '' : '⏱️');
-  }
-}
-
-function updateTrayMenu() {
-  if (!tray) return;
-  
-  const menuItems = [
-    { label: '🕐 Clockwize', enabled: false },
-    { type: 'separator' }
-  ];
-  
-  if (!token || !workspaceId) {
-    menuItems.push({ label: '🔐 התחבר בדפדפן', click: () => shell.openExternal(`http://localhost:5001/login`) });
-    menuItems.push({ label: '(מסונכרן אוטומטית)', enabled: false });
-  } else {
-    const primaryTimer = activeTimers[0];
-    
-    if (primaryTimer) {
-      const projectName = primaryTimer.project_name || 'פרויקט';
-      const taskName = primaryTimer.task_name;
-      let label = primaryTimer.is_running ? '▶️ ' : '⏸️ ';
-      label += projectName;
-      if (taskName) label += ` - ${taskName}`;
-      
-      menuItems.push({ label, enabled: false });
-      
-      if (primaryTimer.is_running) {
-        menuItems.push({ 
-          label: '⏸️ השהה', 
-          click: () => pauseTimer(primaryTimer.id) 
-        });
-      } else {
-        menuItems.push({ 
-          label: '▶️ המשך', 
-          click: () => resumeTimer(primaryTimer.id) 
-        });
-      }
-      
-      menuItems.push({ 
-        label: '⏹️ עצור ושמור', 
-        click: () => stopTimer(primaryTimer.id) 
-      });
-    } else {
-      menuItems.push({ label: 'אין טיימר פעיל', enabled: false });
-    }
-    
-    menuItems.push({ type: 'separator' });
-    menuItems.push({ label: '🚪 התנתק', click: logout });
-  }
-  
-  menuItems.push({ type: 'separator' });
-  menuItems.push({ 
-    label: '📱 פתח Clockwize', 
-    click: () => shell.openExternal('http://localhost:5173'),
-    accelerator: 'CmdOrCtrl+O'
-  });
-  menuItems.push({ type: 'separator' });
-  menuItems.push({ label: 'יציאה', click: () => app.quit(), accelerator: 'CmdOrCtrl+Q' });
-  
-  const contextMenu = Menu.buildFromTemplate(menuItems);
-  tray.setContextMenu(contextMenu);
-}
-
-function showNotification(title, body) {
-  new Notification({ title, body }).show();
-}
-
-// Auth Window
-function showAuthWindow() {
-  if (authWindow) {
-    authWindow.focus();
-    return;
-  }
-  
-  authWindow = new BrowserWindow({
-    width: 400,
-    height: 350,
-    resizable: false,
-    title: 'Clockwize - התחברות',
+function createWindow() {
+  const state = loadWindowState();
+  mainWindow = new BrowserWindow({
+    ...state,
+    minWidth: 960,
+    minHeight: 640,
+    title: 'Clockwize',
+    show: false,
+    backgroundColor: '#0f172a',
+    // Unified Mac title bar: content runs under it and the page leaves room for the traffic lights
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      spellcheck: true
     }
   });
-  
-  authWindow.loadFile('index.html');
-  
-  authWindow.on('closed', () => {
-    authWindow = null;
-  });
-}
 
-function logout() {
-  clearSession();
-  activeTimers = [];
-  updateTrayTitle();
-  updateTrayMenu();
-  showNotification('Clockwize', 'התנתקת - התחבר מחדש בדפדפן');
-}
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.on('resize', saveWindowState);
+  mainWindow.on('move', saveWindowState);
 
-// App Initialization
-app.whenReady().then(async () => {
-  // Find active API port
-  await initAPI();
-  
-  // Create tray
-  const iconPath = path.join(__dirname, 'assets', 'iconTemplate.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  hasTrayIcon = !icon.isEmpty();
-  if (hasTrayIcon) icon.setTemplateImage(true);
-
-  tray = new Tray(icon);
-  tray.setTitle(hasTrayIcon ? '' : '⏱️');
-  
-  // Load session from shared file (synced with browser)
-  loadLocalSession();
-  
-  // Validate session
-  if (token) {
-    const valid = await validateSession();
-    if (!valid) {
-      token = null;
-      workspaceId = null;
-    }
-  }
-  
-  // Initial fetch and menu
-  updateTrayMenu();
-  
-  if (token && workspaceId) {
-    fetchActiveTimers();
-  }
-  
-  // Start polling for timers
-  pollInterval = setInterval(fetchActiveTimers, 10000);
-  displayInterval = setInterval(updateTrayTitle, 1000);
-  
-  // Check for session updates every 5 seconds (in case user logs in via browser)
-  setInterval(async () => {
-    const hadSession = !!token;
-    loadLocalSession();
-    
-    if (!hadSession && token) {
-      // New session detected
-      console.log('New session detected from browser');
-      const valid = await validateSession();
-      if (valid) {
-        fetchActiveTimers();
-        updateTrayMenu();
-        showNotification('Clockwize', 'מחובר!');
+  // Closing the window keeps the app (and the running timer) alive, like other Mac apps.
+  // Clicking the Dock icon brings it back; Cmd+Q really quits.
+  mainWindow.on('close', (event) => {
+    if (!quitting) {
+      event.preventDefault();
+      if (mainWindow.isFullScreen()) {
+        mainWindow.once('leave-full-screen', () => mainWindow.hide());
+        mainWindow.setFullScreen(false);
+      } else {
+        mainWindow.hide();
       }
     }
-  }, 5000);
-});
+  });
+  mainWindow.on('closed', () => { mainWindow = null; });
 
-app.on('window-all-closed', (e) => {
-  // Don't quit when all windows closed - we're a menu bar app
-  e.preventDefault();
-});
+  // Links to other sites open in the default browser, app links stay in the window
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAppUrl(url)) return { action: 'allow' };
+    if (/^(https?|mailto|tel):/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('file:') || isAppUrl(url)) return;
+    event.preventDefault();
+    if (/^(https?|mailto|tel):/i.test(url)) shell.openExternal(url);
+  });
 
-// IPC handlers for auth window
-const { ipcMain } = require('electron');
+  // The page title tracks the current screen; keep the window titled after the app
+  mainWindow.on('page-title-updated', (event) => event.preventDefault());
 
-ipcMain.handle('login', async (event, email, password) => {
+  // Electron has no right-click menu by default - give text fields and links the usual one
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template = [];
+    for (const suggestion of params.dictionarySuggestions.slice(0, 4)) {
+      template.push({ label: suggestion, click: () => mainWindow.webContents.replaceMisspelling(suggestion) });
+    }
+    if (params.misspelledWord) {
+      template.push(
+        { label: 'הוסף למילון', click: () => mainWindow.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) },
+        { type: 'separator' }
+      );
+    }
+    if (params.linkURL && !isAppUrl(params.linkURL)) {
+      template.push({ label: 'פתח קישור בדפדפן', click: () => shell.openExternal(params.linkURL) }, { type: 'separator' });
+    }
+    if (params.isEditable) {
+      template.push(
+        { role: 'cut', label: 'גזור', enabled: params.editFlags.canCut },
+        { role: 'copy', label: 'העתק', enabled: params.editFlags.canCopy },
+        { role: 'paste', label: 'הדבק', enabled: params.editFlags.canPaste },
+        { role: 'selectAll', label: 'בחר הכל' }
+      );
+    } else if (params.selectionText.trim()) {
+      template.push({ role: 'copy', label: 'העתק' });
+    }
+    if (template.length) Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  });
+}
+
+function showWindow() {
+  if (!mainWindow) {
+    createWindow();
+    loadCurrentPage();
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function openInApp(route) {
+  showWindow();
+  if (serverPort) mainWindow.loadURL(`${appUrl()}${route}`);
+}
+
+function showLoading(params = {}) {
+  mainWindow?.loadFile(LOADING_PAGE, { query: params });
+}
+
+function loadCurrentPage() {
+  if (serverPort) mainWindow.loadURL(appUrl());
+  else showLoading();
+}
+
+// ---------- Server ----------
+
+async function chooseProjectFolder() {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'איפה נמצאת תיקיית Clockwize?',
+    message: 'בחרו את תיקיית הפרויקט של Clockwize (זו שמכילה את server ו-client)',
+    properties: ['openDirectory']
+  });
+  const dir = result.filePaths?.[0];
+  if (!dir) return false;
+  if (!isProjectRoot(dir)) {
+    dialog.showErrorBox('Clockwize', 'התיקייה שנבחרה לא מכילה את server/index.js');
+    return false;
+  }
+  saveProjectRoot(dir);
+  return true;
+}
+
+async function bootServer() {
+  serverPort = null;
+  showLoading();
+  projectRoot = resolveProjectRoot();
+  if (!projectRoot) {
+    showLoading({ error: 'לא נמצאה תיקיית הפרויקט של Clockwize', canChoose: '1' });
+    return;
+  }
+
   try {
-    const response = await apiRequest('POST', '/auth/login', { email, password });
-    token = response.token;
-    
-    // Get workspaces
-    const workspaces = await apiRequest('GET', '/workspaces');
-    if (workspaces.length > 0) {
-      workspaceId = workspaces[0].id;
-      fetchActiveTimers();
-      updateTrayMenu();
-      
-      if (authWindow) {
-        authWindow.close();
+    const { port, child } = await startServer({
+      projectRoot,
+      logFile: serverLogFile(),
+      onExit: (code, details) => {
+        serverChild = null;
+        serverPort = null;
+        if (!quitting) showLoading({ error: `השרת נעצר במפתיע (קוד ${code})`, details });
       }
-      
-      return { success: true };
-    } else {
-      throw new Error('לא נמצאו workspaces');
-    }
-  } catch (e) {
-    return { success: false, error: e.message };
+    });
+    serverChild = child;
+    serverPort = port;
+    mainWindow?.loadURL(appUrl());
+    timerState?.refresh({ withSummary: true });
+  } catch (error) {
+    showLoading({ error: error.message, details: error.details || '' });
   }
+}
+
+function stopServer() {
+  if (serverChild) {
+    serverChild.kill();
+    serverChild = null;
+  }
+}
+
+ipcMain.handle('clockwize:retry', () => bootServer());
+ipcMain.handle('clockwize:choose-folder', async () => {
+  if (await chooseProjectFolder()) await bootServer();
+});
+ipcMain.handle('clockwize:open-logs', () => shell.openPath(serverLogFile()));
+ipcMain.handle('clockwize:browser-login', () => {
+  if (serverPort) shell.openExternal(`${appUrl()}/login?passkey=desktop`);
+});
+
+// When the window is signed out and a valid session shows up (passkey sign-in in the browser,
+// or an earlier browser login), sign the window in with it and bring the app forward
+async function adoptSession({ token, workspaceId }) {
+  if (!mainWindow || mainWindow.isDestroyed() || !isAppUrl(mainWindow.webContents.getURL())) return;
+  const signedIn = await mainWindow.webContents
+    .executeJavaScript("Boolean(localStorage.getItem('token'))")
+    .catch(() => true);
+  if (signedIn) return;
+  await mainWindow.webContents.executeJavaScript(
+    `localStorage.setItem('token', ${JSON.stringify(token)});` +
+    (workspaceId ? `localStorage.setItem('currentWorkspaceId', ${JSON.stringify(workspaceId)});` : '') +
+    'true'
+  );
+  mainWindow.loadURL(appUrl());
+  showWindow();
+}
+
+// ---------- Menus ----------
+
+function buildAppMenu() {
+  const template = [
+    {
+      label: 'Clockwize',
+      submenu: [
+        { role: 'about', label: 'אודות Clockwize' },
+        { type: 'separator' },
+        { label: 'פתח את קובץ הלוג של השרת', click: () => shell.openPath(serverLogFile()) },
+        { label: 'הצג את תיקיית הפרויקט', click: () => projectRoot && shell.openPath(projectRoot) },
+        { type: 'separator' },
+        { role: 'services', label: 'שירותים' },
+        { type: 'separator' },
+        { role: 'hide', label: 'הסתר את Clockwize' },
+        { role: 'hideOthers', label: 'הסתר אחרים' },
+        { role: 'unhide', label: 'הצג הכל' },
+        { type: 'separator' },
+        { role: 'quit', label: 'צא מ-Clockwize' }
+      ]
+    },
+    {
+      label: 'עריכה',
+      submenu: [
+        { role: 'undo', label: 'בטל' },
+        { role: 'redo', label: 'בצע שוב' },
+        { type: 'separator' },
+        { role: 'cut', label: 'גזור' },
+        { role: 'copy', label: 'העתק' },
+        { role: 'paste', label: 'הדבק' },
+        { role: 'pasteAndMatchStyle', label: 'הדבק והתאם סגנון' },
+        { role: 'delete', label: 'מחק' },
+        { role: 'selectAll', label: 'בחר הכל' }
+      ]
+    },
+    {
+      label: 'תצוגה',
+      submenu: [
+        { role: 'reload', label: 'טען מחדש' },
+        { role: 'forceReload', label: 'טען מחדש בכוח' },
+        { role: 'toggleDevTools', label: 'כלי מפתחים' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: 'גודל רגיל' },
+        { role: 'zoomIn', label: 'הגדל' },
+        { role: 'zoomOut', label: 'הקטן' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: 'מסך מלא' }
+      ]
+    },
+    {
+      label: 'ניווט',
+      submenu: [
+        { label: 'אחורה', accelerator: 'CmdOrCtrl+[', click: () => mainWindow?.webContents.navigationHistory.goBack() },
+        { label: 'קדימה', accelerator: 'CmdOrCtrl+]', click: () => mainWindow?.webContents.navigationHistory.goForward() },
+        { type: 'separator' },
+        { label: 'לוח בקרה', accelerator: 'CmdOrCtrl+Shift+H', click: () => serverPort && mainWindow?.loadURL(appUrl()) }
+      ]
+    },
+    {
+      label: 'חלון',
+      submenu: [
+        { role: 'minimize', label: 'מזער' },
+        { role: 'zoom', label: 'הגדל חלון' },
+        { role: 'close', label: 'סגור חלון' },
+        { type: 'separator' },
+        { role: 'front', label: 'הבא הכל לחזית' }
+      ]
+    }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+// ---------- Lifecycle ----------
+
+app.on('second-instance', showWindow);
+
+app.on('activate', showWindow);
+
+app.on('before-quit', () => {
+  quitting = true;
+});
+
+// The main window only hides on close and the popover is a panel; never let a closed
+// window quit the app (Cmd+Q does that)
+app.on('window-all-closed', () => {});
+
+app.on('will-quit', () => {
+  menuBar?.stop();
+  timerState?.stop();
+  stopServer();
+});
+
+app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
+
+  // A packaged app gets its icon from the bundle; in development show the real one too
+  if (!app.isPackaged) {
+    app.dock?.setIcon(nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png')));
+  }
+  app.setAboutPanelOptions({
+    applicationName: 'Clockwize',
+    applicationVersion: app.getVersion(),
+    copyright: 'ניהול זמן וחיוב לפרילנסרים'
+  });
+
+  buildAppMenu();
+  createWindow();
+
+  timerState = createTimerState({
+    getPort: () => serverPort,
+    getSessionFile: () => process.env.CLOCKWIZE_SESSION_FILE || path.join(projectRoot || '', '.local-session')
+  });
+  timerState.on('session', (session) => adoptSession(session).catch(() => {}));
+  // Let the open page re-sync its timer state right away (TimerSyncProvider listens to focus)
+  timerState.on('acted', () => {
+    mainWindow?.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))").catch(() => {});
+  });
+
+  menuBar = createMenuBar({ state: timerState, showWindow, openInApp });
+  menuBar.start();
+  // Development aid: open the popover on launch (screenshots, UI work)
+  if (!app.isPackaged && process.env.CLOCKWIZE_SHOW_POPOVER) setTimeout(() => menuBar.togglePopover(), 3000);
+
+  // Notification Center widget / Control Center control, when one was built into the app
+  const { widgetPort, widgetSecret } = readAppConfig();
+  if (widgetPort && widgetSecret) {
+    const feed = createWidgetFeed({
+      port: widgetPort,
+      secret: widgetSecret,
+      state: timerState,
+      reloadHelper: path.join(path.dirname(app.getPath('exe')), 'clockwize-widget-reload')
+    });
+    feed.start();
+    app.on('will-quit', () => feed.stop());
+  }
+
+  timerState.start();
+
+  bootServer();
 });

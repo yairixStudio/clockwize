@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>Clockwize</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --label: rgba(0, 0, 0, 0.86);
+      --secondary: rgba(0, 0, 0, 0.52);
+      --tertiary: rgba(0, 0, 0, 0.3);
+      --separator: rgba(0, 0, 0, 0.1);
+      --fill: rgba(0, 0, 0, 0.055);
+      --fill-hover: rgba(0, 0, 0, 0.1);
+      --accent: #5856d6;
+      --running: #248a3d;
+      --paused: #c93400;
+      --danger: #d70015;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --label: rgba(255, 255, 255, 0.88);
+        --secondary: rgba(255, 255, 255, 0.55);
+        --tertiary: rgba(255, 255, 255, 0.3);
+        --separator: rgba(255, 255, 255, 0.1);
+        --fill: rgba(255, 255, 255, 0.07);
+        --fill-hover: rgba(255, 255, 255, 0.13);
+        --accent: #7d7aff;
+        --running: #30d158;
+        --paused: #ff9f0a;
+        --danger: #ff453a;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: transparent; }
+    body {
+      font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      color: var(--label);
+      -webkit-user-select: none;
+      user-select: none;
+      cursor: default;
+      overflow: hidden;
+    }
+    #root { padding: 6px 0; }
+    section { padding: 8px 14px; }
+    hr { height: 1px; margin: 4px 14px; border: 0; background: var(--separator); }
+    .header { display: flex; align-items: center; gap: 8px; padding-top: 6px; padding-bottom: 4px; }
+    .header h1 { flex: 1; margin: 0; font-size: 13px; font-weight: 600; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tertiary); flex-shrink: 0; }
+    .dot.running { background: var(--running); box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 22%, transparent); }
+    .dot.paused { background: var(--paused); }
+    .muted { color: var(--secondary); }
+    .small { font-size: 11px; }
+    .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    button {
+      font: inherit; color: inherit; border: 0; border-radius: 6px; padding: 5px 10px;
+      background: var(--fill); display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+    }
+    button:hover:not(:disabled) { background: var(--fill-hover); }
+    button:active:not(:disabled) { filter: brightness(0.92); }
+    button:disabled { opacity: 0.45; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button.primary { background: var(--accent); color: #fff; }
+    button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); }
+    button.danger { background: var(--danger); color: #fff; padding-inline: 8px; }
+    button.icon { padding: 4px; width: 26px; height: 26px; background: transparent; }
+    button.icon:hover:not(:disabled) { background: var(--fill); }
+    svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    .timer-card { display: grid; gap: 2px; }
+    .project { font-size: 14px; font-weight: 600; }
+    .clock {
+      font: 600 34px/1.15 -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+      direction: ltr; text-align: center; margin: 8px 0 10px;
+    }
+    .clock.running { color: var(--running); }
+    .clock.paused { color: var(--paused); }
+    .actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
+    .actions button { padding: 7px 10px; }
+
+    .others { display: grid; gap: 2px; margin-top: 8px; }
+    .row {
+      display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px;
+    }
+    .row:hover { background: var(--fill); }
+    .row .grow { flex: 1; min-width: 0; }
+    .row .time { font-variant-numeric: tabular-nums; direction: ltr; color: var(--secondary); }
+    .row button.icon { opacity: 0.75; }
+    .row:hover button.icon { opacity: 1; }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { background: var(--fill); border-radius: 8px; padding: 7px 10px; }
+    .stat b { display: block; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; text-align: right; }
+
+    .title { font-size: 11px; font-weight: 600; color: var(--secondary); margin: 0 0 4px; }
+    .empty { text-align: center; padding: 14px 14px 10px; }
+    .empty .big { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .error { color: var(--danger); font-size: 12px; padding-top: 0; }
+
+    .footer { display: flex; gap: 6px; padding-top: 6px; }
+    .footer button { flex: 1; background: transparent; justify-content: space-between; white-space: nowrap; }
+    .footer button:first-child { flex: 1.7; }
+    .footer button:hover { background: var(--fill); }
+    kbd { font: 11px -apple-system, sans-serif; color: var(--tertiary); direction: ltr; unicode-bidi: isolate; }
+  </style>
+</head>
+<body>
+  <div id="root" role="dialog" aria-label="Clockwize"></div>
+
+  <script>
+    const bridge = window.clockwizePopover;
+    const root = document.getElementById('root');
+    let state = null;
+    let pendingDiscard = null;
+
+    const ICONS = {
+      pause: '<path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" fill="currentColor"/>',
+      play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>',
+      stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>',
+      x: '<path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+      open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+    };
+
+    function el(tag, props = {}, ...children) {
+      const node = document.createElement(tag);
+      for (const [key, value] of Object.entries(props)) {
+        if (value === undefined || value === null || value === false) continue;
+        if (key === 'class') node.className = value;
+        else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+        else node.setAttribute(key, value === true ? '' : value);
+      }
+      for (const child of children.flat()) {
+        if (child === null || child === undefined || child === false) continue;
+        node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+      }
+      return node;
+    }
+
+    function icon(name) {
+      const span = el('span', { 'aria-hidden': 'true' });
+      span.innerHTML = `<svg viewBox="0 0 24 24">${ICONS[name]}</svg>`;
+      return span.firstChild;
+    }
+
+    const live = (timer) => timer.isRunning && timer.runningSince
+      ? Math.max(0, Math.floor((Date.now() - new Date(timer.runningSince).getTime()) / 1000))
+      : timer.elapsedSeconds;
+
+    const clock = (s) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    const hm = (s) => `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+    const runningExtra = () => state.timers.reduce((sum, t) => sum + live(t) - t.elapsedSeconds, 0);
+
+    const act = (name, payload) => bridge.act(name, payload);
+    const subtitle = (item) => [item.taskName, item.clientName].filter(Boolean).join(' · ');
+
+    function header() {
+      const primary = state.timers[0];
+      return el('section', { class: 'header' },
+        el('span', { class: `dot ${primary ? (primary.isRunning ? 'running' : 'paused') : ''}` }),
+        el('h1', {}, 'Clockwize'),
+        el('button', { class: 'icon', title: 'פתח את Clockwize', 'aria-label': 'פתח את Clockwize', onclick: () => bridge.openApp() }, icon('open'))
+      );
+    }
+
+    function timerCard(timer) {
+      const sub = subtitle(timer);
+      return el('section', { class: 'timer-card' },
+        el('div', { class: 'project ellipsis', title: timer.projectName }, timer.projectName),
+        sub && el('div', { class: 'muted ellipsis', title: sub }, sub),
+        el('div', { class: `clock ${timer.isRunning ? 'running' : 'paused'}`, 'data-live': timer.id, role: 'timer' }, clock(live(timer))),
+        el('div', { class: 'actions' },
+          timer.isRunning
+            ? el('button', { class: 'primary', disabled: state.busy, onclick: () => act('pause', timer.id) }, icon('pause'), 'השהה')
+            : el('button', { class: 'primary', disabled: state.busy, onclick: () => act('resume', timer.id) }, icon('play'), 'המשך'),
+          el('button', { disabled: state.busy, onclick: () => act('stop', timer.id) }, icon('stop'), 'עצור ושמור'),
+          // Two-step discard: a modal confirm would blur (and close) the popover
+          pendingDiscard === timer.id
+            ? el('button', { class: 'danger', disabled: state.busy, onclick: () => { pendingDiscard = null; act('discard', timer.id); } }, 'לבטל?')
+            : el('button', {
+              class: 'icon', title: 'בטל טיימר (הזמן לא יישמר)', 'aria-label': 'בטל טיימר', disabled: state.busy,
+              onclick: () => {
+                pendingDiscard = timer.id;
+                render();
+                setTimeout(() => { if (pendingDiscard === timer.id) { pendingDiscard = null; render(); } }, 3000);
+              }
+            }, icon('x'))
+        )
+      );
+    }
+
+    function otherTimers(timers) {
+      if (!timers.length) return null;
+      return el('section', {},
+        el('p', { class: 'title' }, 'טיימרים נוספים'),
+        el('div', { class: 'others' }, timers.map((timer) => el('div', { class: 'row' },
+          el('span', { class: `dot ${timer.isRunning ? 'running' : 'paused'}` }),
+          el('div', { class: 'grow ellipsis' }, [timer.projectName, timer.taskName].filter(Boolean).join(' · ')),
+          el('span', { class: 'time', 'data-live': timer.id }, clock(live(timer))),
+          el('button', {
+            class: 'icon', disabled: state.busy,
+            title: timer.isRunning ? 'השהה' : 'המשך', 'aria-label': timer.isRunning ? 'השהה' : 'המשך',
+            onclick: () => act(timer.isRunning ? 'pause' : 'resume', timer.id)
+          }, icon(timer.isRunning ? 'pause' : 'play'))
+        )))
+      );
+    }
+
+    function stats() {
+      if (state.today.loggedSeconds === null) return null;
+      const extra = runningExtra();
+      return el('section', { class: 'stats' },
+        el('div', { class: 'stat' }, el('span', { class: 'muted small' }, 'היום'), el('b', { 'data-total': 'today' }, hm(state.today.withTimersSeconds + extra))),
+        el('div', { class: 'stat' }, el('span', { class: 'muted small' }, 'השבוע'), el('b', { 'data-total': 'week' }, hm(state.week.withTimersSeconds + extra)))
+      );
+    }
+
+    function recent() {
+      const busyIds = new Set(state.timers.map((t) => `${t.projectId}:${t.taskId || ''}`));
+      const items = state.recent.filter((r) => !busyIds.has(`${r.projectId}:${r.taskId || ''}`)).slice(0, 4);
+      if (!items.length) return null;
+      return el('section', {},
+        el('p', { class: 'title' }, 'המשך לעבוד על'),
+        items.map((item) => el('div', { class: 'row' },
+          el('div', { class: 'grow' },
+            el('div', { class: 'ellipsis' }, item.taskName || item.projectName),
+            el('div', { class: 'muted small ellipsis' }, [item.taskName ? item.projectName : null, item.clientName].filter(Boolean).join(' · '))
+          ),
+          el('button', {
+            class: 'icon', title: 'התחל טיימר', 'aria-label': `התחל טיימר: ${item.taskName || item.projectName}`, disabled: state.busy,
+            onclick: () => act('start', { projectId: item.projectId, taskId: item.taskId })
+          }, icon('play'))
+        ))
+      );
+    }
+
+    function footer() {
+      return el('section', { class: 'footer' },
+        el('button', { onclick: () => bridge.openApp() }, 'פתח את Clockwize', el('kbd', {}, '⌘O')),
+        el('button', { onclick: () => bridge.quit() }, 'יציאה', el('kbd', {}, '⌘Q'))
+      );
+    }
+
+    function render() {
+      if (!state) return;
+      const parts = [header(), el('hr')];
+      const [primary, ...others] = state.timers;
+
+      if (!state.serverUp && !state.timers.length) {
+        parts.push(el('section', { class: 'empty' },
+          el('div', { class: 'big' }, 'השרת של Clockwize לא זמין'),
+          el('div', { class: 'muted' }, 'הוא עולה יחד עם האפליקציה. אם זה נמשך, פתחו את החלון לפרטים.')
+        ));
+      } else if (!state.signedIn) {
+        parts.push(el('section', { class: 'empty' },
+          el('div', { class: 'big' }, 'לא מחוברים'),
+          el('div', { class: 'muted' }, 'התחברו בחלון של Clockwize והטיימר יופיע כאן.'),
+          el('div', { style: 'margin-top:10px' }, el('button', { class: 'primary', onclick: () => bridge.openApp('/login') }, 'התחברות'))
+        ));
+      } else {
+        parts.push(primary ? timerCard(primary) : el('section', { class: 'empty' },
+          el('div', { class: 'big' }, 'אין טיימר פעיל'),
+          el('div', { class: 'muted' }, state.recent.length ? 'בחרו משימה אחרונה כדי להתחיל.' : 'התחילו טיימר מתוך פרויקט או משימה.')
+        ));
+        parts.push(otherTimers(others));
+        if (state.error) parts.push(el('section', { class: 'error', role: 'alert' }, state.error));
+        const statsNode = stats();
+        if (statsNode) parts.push(el('hr'), statsNode);
+        const recentNode = recent();
+        if (recentNode) parts.push(el('hr'), recentNode);
+      }
+
+      parts.push(el('hr'), footer());
+      root.replaceChildren(...parts.filter(Boolean));
+      bridge.resize(root.getBoundingClientRect().height);
+    }
+
+    // Tick the live numbers without rebuilding the DOM (keeps hover and focus stable)
+    setInterval(() => {
+      if (!state) return;
+      for (const timer of state.timers) {
+        document.querySelectorAll(`[data-live="${timer.id}"]`).forEach((node) => { node.textContent = clock(live(timer)); });
+      }
+      const extra = runningExtra();
+      const today = document.querySelector('[data-total="today"]');
+      const week = document.querySelector('[data-total="week"]');
+      if (today) today.textContent = hm(state.today.withTimersSeconds + extra);
+      if (week) week.textContent = hm(state.week.withTimersSeconds + extra);
+    }, 1000);
+
+    document.addEventListener('keydown', (event) => {
+      const primary = state?.timers[0];
+      if (event.key === 'Escape') bridge.close();
+      else if (event.metaKey && event.key.toLowerCase() === 'o') bridge.openApp();
+      else if (event.metaKey && event.key.toLowerCase() === 'q') bridge.quit();
+      else if (event.key === ' ' && primary && event.target === document.body) {
+        event.preventDefault();
+        act(primary.isRunning ? 'pause' : 'resume', primary.id);
+      }
+    });
+
+    bridge.onState((next) => { state = next; render(); });
+    bridge.getState().then((initial) => { if (!state) { state = initial; render(); } });
+  </script>
+</body>
+</html>
