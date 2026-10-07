@@ -970,8 +970,8 @@ router.put('/:id/reminders/:reminderId', async (req, res) => {
     const db = getDb(req);
     const { content, due_date, is_completed } = req.body;
 
-    // Map is_completed to is_read in unified reminders table
-    const isRead = is_completed !== undefined ? is_completed : undefined;
+    // Map is_completed to is_read in unified reminders table (NULL = keep current value, see COALESCE)
+    const isRead = is_completed !== undefined ? (is_completed ? 1 : 0) : null;
 
     db.prepare(`
       UPDATE reminders
@@ -980,7 +980,7 @@ router.put('/:id/reminders/:reminderId', async (req, res) => {
           is_read = COALESCE(?, is_read),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND association_type = 'lead' AND association_id = ? AND workspace_id = ?
-    `).run(content, due_date, isRead, req.params.reminderId, req.params.id, req.workspaceId);
+    `).run(content ?? null, due_date ?? null, isRead, req.params.reminderId, req.params.id, req.workspaceId);
 
     const reminder = db.prepare(`SELECT r.*, r.is_read as is_completed FROM reminders r WHERE r.id = ?`).get(req.params.reminderId);
     res.json(reminder);

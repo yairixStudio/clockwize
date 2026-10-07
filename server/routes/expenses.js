@@ -311,7 +311,13 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
       WHERE p.workspace_id = ? AND p.type = 'expense'${dateFilter}
     `).get(...params);
 
-    // By category
+    // By category - params must follow placeholder order: the date filter sits in the JOIN, before ec.workspace_id
+    const byCategoryParams = [];
+    if (start_date && end_date) {
+      byCategoryParams.push(start_date, end_date);
+    }
+    byCategoryParams.push(req.workspaceId);
+
     const byCategory = db.prepare(`
       SELECT 
         ec.id,
@@ -320,11 +326,11 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
         ec.icon,
         COALESCE(SUM(p.amount), 0) as total
       FROM expense_categories ec
-      LEFT JOIN payments p ON p.category_id = ec.id AND p.type = 'expense'${dateFilter.replace('p.workspace_id', 'ec.workspace_id')}
+      LEFT JOIN payments p ON p.category_id = ec.id AND p.type = 'expense'${dateFilter}
       WHERE ec.workspace_id = ?
       GROUP BY ec.id
       ORDER BY total DESC
-    `).all(req.workspaceId);
+    `).all(...byCategoryParams);
 
     // Uncategorized
     const uncategorized = db.prepare(`

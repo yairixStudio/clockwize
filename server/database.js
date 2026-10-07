@@ -25,8 +25,10 @@ class Database {
           const stmt = self.db.prepare(sql);
           stmt.run(params);
           stmt.free();
+          // Must be read before save() - export() reopens the connection and resets the counter
+          const changes = self.db.getRowsModified();
           self.save();
-          return { changes: self.db.getRowsModified() };
+          return { changes };
         } catch (e) {
           console.error('SQL Error:', e.message, sql);
           throw e;
@@ -109,6 +111,8 @@ class Database {
     const data = this.db.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_PATH, buffer);
+    // export() closes and reopens the connection, which resets PRAGMA foreign_keys to OFF
+    this.pragma('foreign_keys = ON');
   }
 }
 
@@ -678,6 +682,26 @@ async function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
       UNIQUE(workspace_id, addon_id, setting_key)
+    )`);
+  } catch (e) {
+    // Table already exists
+  }
+
+  // Migration: Create passkeys table (WebAuthn credentials)
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS passkeys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      credential_id TEXT NOT NULL UNIQUE,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT,
+      device_type TEXT,
+      backed_up INTEGER DEFAULT 0,
+      name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )`);
   } catch (e) {
     // Table already exists

@@ -101,7 +101,7 @@ function ClientDetail() {
         projectsAPI.getAll(id),
         statsAPI.getClient(id),
         timerAPI.getEntries().then(entries => entries.filter(e => e.client_id === id)),
-        paymentsAPI.getAll().then(payments => payments.filter(p => p.client_id === id)),
+        paymentsAPI.getAll({ client_id: id }),
         credentialsAPI.getByClient(id),
         tasksAPI.getAll()
       ]);
@@ -155,10 +155,7 @@ function ClientDetail() {
 
       // Load reminders
       try {
-        const allReminders = await remindersAPI.getAll({ include_read: 'true' });
-        const relevantReminders = allReminders.filter(r =>
-          r.association_type === 'client' && r.association_id === id
-        );
+        const relevantReminders = await remindersAPI.getAll({ include_read: 'true', type: 'client', id });
         setClientReminders(relevantReminders);
       } catch (e) {
         console.error('Error loading reminders:', e);
@@ -189,8 +186,13 @@ function ClientDetail() {
     const storageKey = `clientTimer_${id}`;
     const savedTimer = localStorage.getItem(storageKey);
     if (savedTimer) {
-      const timer = JSON.parse(savedTimer);
-      setClientTimer(timer);
+      try {
+        setClientTimer(JSON.parse(savedTimer));
+      } catch {
+        // Corrupted value - drop it instead of crashing the page
+        localStorage.removeItem(storageKey);
+        setClientTimer(null);
+      }
     }
   }, [id]);
 
@@ -726,7 +728,7 @@ function ClientDetail() {
   }
 
   return (
-    <div className="page fade-in">
+    <div className="page fade-in client-detail-page">
       <div className="page-header-container">
         <div className="breadcrumb">
           <BreadcrumbItem

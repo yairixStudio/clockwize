@@ -1,12 +1,46 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
+
+// Access sessions for protected links are signed server-side and kept in an
+// httpOnly cookie - never trust verification flags coming from the query string
+const ACCESS_TOKEN_TTL = '2h';
+const ACCESS_COOKIE_MAX_AGE = 2 * 60 * 60 * 1000;
+const accessCookieName = (linkId) => `share_access_${linkId}`;
+
+const grantAccess = (res, link) => {
+  const token = jwt.sign({ linkId: link.id }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+  res.cookie(accessCookieName(link.id), token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/api/share',
+    maxAge: ACCESS_COOKIE_MAX_AGE
+  });
+};
+
+const hasVerifiedAccess = (req, link) => {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return false;
+
+  const prefix = `${accessCookieName(link.id)}=`;
+  const cookie = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith(prefix));
+  if (!cookie) return false;
+
+  try {
+    const decoded = jwt.verify(decodeURIComponent(cookie.slice(prefix.length)), process.env.JWT_SECRET);
+    return decoded.linkId === link.id;
+  } catch (error) {
+    return false;
+  }
+};
 
 // Create a new shared link
 router.post('/', authMiddleware, workspaceMiddleware, async (req, res) => {
@@ -248,18 +282,17 @@ router.post('/verify-password/:token', async (req, res) => {
       return res.status(401).json({ error: 'סיסמא שגויה' });
     }
 
-    // Return access token for this session
-    const accessToken = uuidv4();
-    
+    // Grant a signed access session for this link
+    grantAccess(res, link);
+
     // Log access
     db.prepare(`
       INSERT INTO shared_link_access (id, shared_link_id, created_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `).run(uuidv4(), link.id);
 
-    res.json({ 
-      success: true, 
-      access_token: accessToken,
+    res.json({
+      success: true,
       resource_type: link.resource_type,
       resource_id: link.resource_id
     });
@@ -295,13 +328,16 @@ router.post('/verify-email/:token', authMiddleware, (req, res) => {
       return res.status(403).json({ error: 'אין לך הרשאה לצפות בלינק זה' });
     }
 
+    // Grant a signed access session for this link
+    grantAccess(res, link);
+
     // Log access
     db.prepare(`
       INSERT INTO shared_link_access (id, shared_link_id, accessed_by_email, accessed_by_user_id, verified_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).run(uuidv4(), link.id, user.email, req.userId);
 
-    res.json({ 
+    res.json({
       success: true,
       resource_type: link.resource_type,
       resource_id: link.resource_id
@@ -316,7 +352,6 @@ router.post('/verify-email/:token', authMiddleware, (req, res) => {
 router.get('/access/:token', (req, res) => {
   try {
     const db = getDb(req);
-    const { password_verified, user_email } = req.query;
 
     const link = db.prepare('SELECT * FROM shared_links WHERE share_token = ?').get(req.params.token);
 
@@ -338,16 +373,14 @@ router.get('/access/:token', (req, res) => {
       return getResourceData(db, link, res);
     }
 
-    // For password links, require verification flag
-    if (link.share_type === 'password' && !password_verified) {
+    // For password links, require a verified access session
+    if (link.share_type === 'password' && !hasVerifiedAccess(req, link)) {
       return res.status(401).json({ error: 'נדרש אימות סיסמא', requires_password: true });
     }
 
-    // For email links, require user email match
-    if (link.share_type === 'email') {
-      if (!user_email || user_email.toLowerCase() !== link.allowed_email.toLowerCase()) {
-        return res.status(401).json({ error: 'נדרשת התחברות', requires_email: true, allowed_email: link.allowed_email });
-      }
+    // For email links, require a verified access session
+    if (link.share_type === 'email' && !hasVerifiedAccess(req, link)) {
+      return res.status(401).json({ error: 'נדרשת התחברות', requires_email: true });
     }
 
     return getResourceData(db, link, res);

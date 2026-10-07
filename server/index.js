@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
@@ -25,8 +26,13 @@ async function startServer() {
   // Make db available to routes
   app.locals.db = db;
 
+  // One-time migration of data encrypted with the old hard-coded secret / user-id salt
+  const { migrateLegacyEncryption } = await import('./utils/crypto.js');
+  migrateLegacyEncryption(db);
+
   // Dynamic import routes after db is ready
   const { default: authRoutes } = await import('./routes/auth.js');
+  const { default: passkeysRoutes } = await import('./routes/passkeys.js');
   const { default: clientRoutes } = await import('./routes/clients.js');
   const { default: projectRoutes } = await import('./routes/projects.js');
   const { default: taskRoutes } = await import('./routes/tasks.js');
@@ -55,6 +61,7 @@ async function startServer() {
   // Routes
   app.use('/api/workspaces', workspacesRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api/passkeys', passkeysRoutes);
   app.use('/api/clients', clientRoutes);
   app.use('/api/projects', projectRoutes);
   app.use('/api/tasks', taskRoutes);

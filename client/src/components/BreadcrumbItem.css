@@ -45,8 +45,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 36px;
+  height: 36px;
   margin-right: 2px;
   background: transparent;
   border: none;
@@ -175,10 +175,5 @@
   .breadcrumb-dropdown {
     min-width: 180px;
     max-width: 250px;
-  }
-
-  .breadcrumb-dropdown-trigger {
-    width: 20px;
-    height: 20px;
   }
 }

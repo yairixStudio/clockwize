@@ -11,33 +11,6 @@ const getDb = (req) => req.app.locals.db;
 router.use(authMiddleware);
 router.use(workspaceMiddleware);
 
-// DEBUG endpoint - Get ALL sources in database (for debugging)
-router.get('/debug/all', async (req, res) => {
-    try {
-        const db = getDb(req);
-        const allSources = db.prepare(
-            'SELECT * FROM client_sources ORDER BY workspace_id, name'
-        ).all();
-        
-        // Also get client count for each source
-        const sourcesWithCounts = allSources.map(source => {
-            const clientCount = db.prepare(
-                'SELECT COUNT(*) as count FROM clients WHERE source_id = ?'
-            ).get(source.id);
-            return { ...source, client_count: clientCount.count };
-        });
-        
-        res.json({
-            total: allSources.length,
-            sources: sourcesWithCounts,
-            currentWorkspace: req.workspaceId
-        });
-    } catch (error) {
-        console.error('Debug all sources error:', error);
-        res.status(500).json({ error: 'שגיאה' });
-    }
-});
-
 // Get all client sources for this workspace (including global sources)
 router.get('/', async (req, res) => {
     try {

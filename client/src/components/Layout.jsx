@@ -15,7 +15,13 @@ const MAX_SIDEBAR_WIDTH = 400;
 const DEFAULT_SIDEBAR_WIDTH = 220;
 
 function Layout() {
-  const { user, unreadRemindersCount, loadReminders, isAddonEnabled } = useStore();
+  // Per-field selectors - a whole-store subscription re-renders the whole
+  // layout on every timer sync tick
+  const user = useStore(s => s.user);
+  const unreadRemindersCount = useStore(s => s.unreadRemindersCount);
+  const loadReminders = useStore(s => s.loadReminders);
+  const enabledAddons = useStore(s => s.enabledAddons);
+  const isAddonEnabled = (addonId) => enabledAddons.includes(addonId);
   const navigate = useNavigate();
   const location = useLocation();
   const [sharedWithMeCount, setSharedWithMeCount] = useState(0);

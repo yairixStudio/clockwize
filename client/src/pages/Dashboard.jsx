@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Users, Folder, Play, Pause, Square, X, ChevronRight, ChevronDown, Clock, Plus, MessageSquare, Search, CheckCircle2, ExternalLink, Circle, CircleCheck, Star, GripVertical, MoreVertical } from 'lucide-react';
@@ -15,6 +15,20 @@ import TimeEntryModal from '../components/TimeEntryModal';
 import Forum from '../components/Forum';
 import PaymentStatusBadge, { calculateProjectEarnings } from '../components/PaymentStatusBadge';
 import './Dashboard.css';
+
+const DEFAULT_CLIENT_ORDER = { favorites: [], nonFavorites: [] };
+
+// Reads a JSON value from localStorage, dropping it if it got corrupted
+const readStoredJSON = (key, fallback) => {
+  const saved = localStorage.getItem(key);
+  if (!saved) return fallback;
+  try {
+    return JSON.parse(saved);
+  } catch {
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
 
 function Dashboard() {
   const { user, dashboardStats, loadDashboardStats, startTimer, pauseTimer, resumeTimer, stopTimer, discardTimer, activeTimers, getTimerForProject } = useStore();
@@ -66,31 +80,45 @@ function Dashboard() {
   // Drag and drop state
   const [draggedClient, setDraggedClient] = useState(null);
   const [dragOverClient, setDragOverClient] = useState(null);
-  const [customOrder, setCustomOrder] = useState(() => {
-    const saved = localStorage.getItem('dashboard_client_order');
-    return saved ? JSON.parse(saved) : { favorites: [], nonFavorites: [] };
-  });
+  const [customOrder, setCustomOrder] = useState(() =>
+    readStoredJSON('dashboard_client_order', DEFAULT_CLIENT_ORDER)
+  );
 
   // Client-level timer state (local timers, saved to backend when stopped)
   // Format: { [clientId]: { startTime: number, isPaused: boolean, accumulatedSeconds: number, clientName: string } }
-  const [clientTimers, setClientTimers] = useState(() => {
-    const saved = localStorage.getItem('clientTimers');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return {};
-      }
-    }
-    return {};
-  });
+  // ActiveTimer writes the same localStorage key, so localStorage - not this
+  // state - is the source of truth and every write starts from the stored value
+  const [clientTimers, setClientTimers] = useState(() => readStoredJSON('clientTimers', {}));
+  const clientTimersRawRef = useRef(localStorage.getItem('clientTimers') || '{}');
   const [clientTimerElapsed, setClientTimerElapsed] = useState({}); // For display updates
   const timerIntervalRef = useRef(null);
 
-  // Persist client timers to localStorage
+  // Persist client timers to localStorage, merging on top of the stored value
+  const updateClientTimers = useCallback((updater) => {
+    const current = readStoredJSON('clientTimers', {});
+    const newTimers = typeof updater === 'function' ? updater(current) : updater;
+    const raw = JSON.stringify(newTimers);
+    clientTimersRawRef.current = raw;
+    localStorage.setItem('clientTimers', raw);
+    setClientTimers(newTimers);
+  }, []);
+
+  // Pick up client timer changes made from the sidebar timer or another tab
   useEffect(() => {
-    localStorage.setItem('clientTimers', JSON.stringify(clientTimers));
-  }, [clientTimers]);
+    const syncClientTimers = () => {
+      const raw = localStorage.getItem('clientTimers') || '{}';
+      if (raw === clientTimersRawRef.current) return;
+      clientTimersRawRef.current = raw;
+      setClientTimers(readStoredJSON('clientTimers', {}));
+    };
+
+    window.addEventListener('storage', syncClientTimers);
+    const interval = setInterval(syncClientTimers, 1000);
+    return () => {
+      window.removeEventListener('storage', syncClientTimers);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Time entry modal for client timer
   const [showTimeEntryModal, setShowTimeEntryModal] = useState(false);
@@ -645,7 +673,7 @@ function Dashboard() {
   // Client timer handlers - local timers that save to server when stopped
   const handleStartClientTimer = (e, client) => {
     e.stopPropagation();
-    setClientTimers(prev => ({
+    updateClientTimers(prev => ({
       ...prev,
       [client.id]: {
         startTime: Date.now(),
@@ -660,7 +688,7 @@ function Dashboard() {
 
   const handlePauseClientTimer = (e, clientId) => {
     e.stopPropagation();
-    setClientTimers(prev => {
+    updateClientTimers(prev => {
       const timer = prev[clientId];
       if (!timer || timer.isPaused) return prev;
       
@@ -678,7 +706,7 @@ function Dashboard() {
 
   const handleResumeClientTimer = (e, clientId) => {
     e.stopPropagation();
-    setClientTimers(prev => {
+    updateClientTimers(prev => {
       const timer = prev[clientId];
       if (!timer || !timer.isPaused) return prev;
       
@@ -723,7 +751,7 @@ function Dashboard() {
       
       // Clear the client timer
       if (timeEntryData?.clientId) {
-        setClientTimers(prev => {
+        updateClientTimers(prev => {
           const newTimers = { ...prev };
           delete newTimers[timeEntryData.clientId];
           return newTimers;
@@ -753,7 +781,7 @@ function Dashboard() {
   const handleDiscardClientTimer = (e, clientId) => {
     e.stopPropagation();
     // Simply remove the timer without saving
-    setClientTimers(prev => {
+    updateClientTimers(prev => {
       const newTimers = { ...prev };
       delete newTimers[clientId];
       return newTimers;

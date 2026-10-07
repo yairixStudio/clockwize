@@ -1,20 +1,53 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { KeyRound } from 'lucide-react';
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import useStore from '../store/useStore';
 import { useModal } from '../components/Modal';
-import { authAPI } from '../services/api';
+import { authAPI, passkeysAPI } from '../services/api';
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [userId, setUserId] = useState(null);
   const [currentPassword, setCurrentPassword] = useState('');
-  const { login } = useStore();
+  const { login, completeAuth } = useStore();
   const navigate = useNavigate();
   const modal = useModal();
+
+  const navigateAfterAuth = () => {
+    const pendingInviteCode = localStorage.getItem('pendingInviteCode');
+    if (pendingInviteCode) {
+      localStorage.removeItem('pendingInviteCode');
+      navigate(`/join/${pendingInviteCode}`);
+    } else {
+      navigate('/');
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    setError('');
+    setPasskeyLoading(true);
+
+    try {
+      const { flowId, options } = await passkeysAPI.loginOptions();
+      const authResponse = await startAuthentication({ optionsJSON: options });
+      const response = await passkeysAPI.loginVerify({ flowId, response: authResponse });
+      await completeAuth(response);
+      navigateAfterAuth();
+    } catch (err) {
+      // NotAllowedError = the user closed the passkey dialog - not an error worth showing
+      if (err?.name !== 'NotAllowedError') {
+        setError(err.message || 'ההתחברות עם Passkey נכשלה');
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
   
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,16 +68,7 @@ function Login() {
         return;
       }
       
-      console.log('Login successful, navigating to dashboard');
-      
-      // Check for pending invite code
-      const pendingInviteCode = localStorage.getItem('pendingInviteCode');
-      if (pendingInviteCode) {
-        localStorage.removeItem('pendingInviteCode');
-        navigate(`/join/${pendingInviteCode}`);
-      } else {
-        navigate('/');
-      }
+      navigateAfterAuth();
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message);
@@ -167,7 +191,22 @@ function Login() {
           {loading ? 'מתחבר...' : 'התחבר'}
         </button>
       </form>
-      
+
+      {browserSupportsWebAuthn() && (
+        <>
+          <div className="auth-divider"><span>או</span></div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-lg auth-passkey-btn"
+            onClick={handlePasskeyLogin}
+            disabled={passkeyLoading}
+          >
+            <KeyRound size={18} />
+            <span>{passkeyLoading ? 'ממתין לאימות...' : 'התחבר עם Passkey'}</span>
+          </button>
+        </>
+      )}
+
       <div className="auth-footer">
         אין לך חשבון? <Link to="/register">הירשם עכשיו</Link>
       </div>

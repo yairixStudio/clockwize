@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import useStore from './store/useStore';
 import { ModalProvider } from './components/Modal';
 import { TimerSyncProvider } from './components/TimerSyncProvider';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Layout
 import Layout from './components/Layout';
@@ -102,6 +103,7 @@ function App() {
   }, []);
 
   return (
+    <ErrorBoundary>
     <ModalProvider>
       <TimerSyncProvider>
       <Routes>
@@ -174,6 +176,7 @@ function App() {
       </Routes>
       </TimerSyncProvider>
     </ModalProvider>
+    </ErrorBoundary>
   );
 }
 

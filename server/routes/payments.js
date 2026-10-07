@@ -135,11 +135,12 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
             AND p.due_date < date('now')
         `).get(req.workspaceId);
 
-        // By client
-        const byClientParams = [req.workspaceId];
+        // By client - params must follow placeholder order: the date filter sits in the JOIN, before c.workspace_id
+        const byClientParams = [];
         if (start_date && end_date) {
             byClientParams.push(start_date, end_date);
         }
+        byClientParams.push(req.workspaceId);
         const byClient = db.prepare(`
             SELECT 
                 c.id,
@@ -148,12 +149,12 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
                 COALESCE(SUM(CASE WHEN p.status IN ('pending', 'sent', 'draft') THEN p.amount ELSE 0 END), 0) as pending
             FROM clients c
             LEFT JOIN projects proj ON proj.client_id = c.id
-            LEFT JOIN payments p ON p.project_id = proj.id AND (p.type IS NULL OR p.type = 'income')${dateFilter.replace('p.date', 'p.date')}
+            LEFT JOIN payments p ON p.project_id = proj.id AND (p.type IS NULL OR p.type = 'income')${dateFilter}
             WHERE c.workspace_id = ?
             GROUP BY c.id
             HAVING paid > 0 OR pending > 0
             ORDER BY paid DESC
-        `).all(...byClientParams.reverse());
+        `).all(...byClientParams);
 
         res.json({
             income: incomeResult.total,

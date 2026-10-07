@@ -10,11 +10,34 @@ const getHeaders = () => {
   };
 };
 
+// Errors returned by the auth middleware when the token is missing/expired.
+// Other 401s (wrong password, share link password) must NOT log the user out.
+const AUTH_ERRORS = ['אנא התחבר למערכת', 'טוקן לא תקין'];
+
 const handleResponse = async (response) => {
-  const data = await response.json();
+  // Parse defensively - proxy/gateway errors and SPA fallbacks are not JSON
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+
   if (!response.ok) {
-    const error = new Error(data.error || 'שגיאה בשרת');
-    error.details = data.details;
+    const payload = (data && typeof data === 'object') ? data : {};
+    if (response.status === 401 && AUTH_ERRORS.includes(payload.error)) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('currentWorkspaceId');
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
+    const error = new Error(payload.error || `שגיאה בשרת (${response.status})`);
+    error.status = response.status;
+    error.details = payload.details;
     throw error;
   }
   return data;
@@ -55,6 +78,67 @@ export const authAPI = {
 
   resetPassword: (data) =>
     fetch(`${API_BASE}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(handleResponse)
+};
+
+// Passkeys (WebAuthn)
+export const passkeysAPI = {
+  // Management (authenticated)
+  getAll: () =>
+    fetch(`${API_BASE}/passkeys`, { headers: getHeaders() }).then(handleResponse),
+
+  registerOptions: () =>
+    fetch(`${API_BASE}/passkeys/options`, {
+      method: 'POST',
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  registerVerify: (data) =>
+    fetch(`${API_BASE}/passkeys/verify`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  rename: (id, name) =>
+    fetch(`${API_BASE}/passkeys/${id}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ name })
+    }).then(handleResponse),
+
+  remove: (id) =>
+    fetch(`${API_BASE}/passkeys/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  // Login / signup (public)
+  loginOptions: () =>
+    fetch(`${API_BASE}/passkeys/login/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).then(handleResponse),
+
+  loginVerify: (data) =>
+    fetch(`${API_BASE}/passkeys/login/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  signupOptions: (data) =>
+    fetch(`${API_BASE}/passkeys/signup/options`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  signupVerify: (data) =>
+    fetch(`${API_BASE}/passkeys/signup/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)

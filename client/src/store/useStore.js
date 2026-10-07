@@ -15,6 +15,7 @@ const useStore = create((set, get) => ({
   // Timer state - now supports multiple timers
   activeTimers: [],
   timerOperationInProgress: false, // Lock to prevent sync during operations
+  timerMutationCount: 0, // Bumped on every timer mutation, used to discard stale syncs
   
   // Stats state
   dashboardStats: null,
@@ -82,61 +83,58 @@ const useStore = create((set, get) => ({
     }
   },
   
-  // Login
-  login: async (email, password) => {
-    const response = await authAPI.login({ email, password });
-    console.log('Store login - response:', response);
+  // Apply a successful auth response (login / register / passkey flows)
+  completeAuth: async (response) => {
     const { user, token, workspaces, currentWorkspace } = response;
     localStorage.setItem('token', token);
-    
-    // Set current workspace
+
     if (currentWorkspace) {
       localStorage.setItem('currentWorkspaceId', currentWorkspace.id);
     }
-    
-    set({ 
-      user, 
+
+    set({
+      user,
       workspaces: workspaces || [],
       currentWorkspace,
       workspaceRole: currentWorkspace?.role || null,
-      isAuthenticated: true 
+      isAuthenticated: true
     });
+    // Load addons before returning (needed for addon-protected routes and nav links)
+    await get().loadEnabledAddons();
     get().loadActiveTimers();
-    console.log('Store login - returning response with requiresPasswordReset:', response.requiresPasswordReset);
     return response; // Return full response including requiresPasswordReset if present
+  },
+
+  // Login
+  login: async (email, password) => {
+    const response = await authAPI.login({ email, password });
+    return get().completeAuth(response);
   },
   
   // Register
   register: async (name, email, password) => {
     const response = await authAPI.register({ name, email, password });
-    const { user, token, workspaces, currentWorkspace } = response;
-    localStorage.setItem('token', token);
-    
-    if (currentWorkspace) {
-      localStorage.setItem('currentWorkspaceId', currentWorkspace.id);
-    }
-    
-    set({ 
-      user, 
-      workspaces: workspaces || [],
-      currentWorkspace,
-      workspaceRole: currentWorkspace?.role || null,
-      isAuthenticated: true 
-    });
+    return get().completeAuth(response);
   },
-  
+
   // Logout
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('currentWorkspaceId');
-    set({ 
-      user: null, 
-      isAuthenticated: false, 
-      activeTimers: [], 
+    set({
+      user: null,
+      isAuthenticated: false,
+      activeTimers: [],
       dashboardStats: null,
       workspaces: [],
       currentWorkspace: null,
-      workspaceRole: null
+      workspaceRole: null,
+      // Clear per-user state so the next login doesn't inherit it
+      enabledAddons: ['credentials', 'files', 'notes'],
+      integrations: [],
+      reminders: [],
+      unreadRemindersCount: 0,
+      timerOperationInProgress: false
     });
   },
   
@@ -265,10 +263,22 @@ const useStore = create((set, get) => ({
       return;
     }
     
+    const mutationCount = get().timerMutationCount;
+
     try {
       const timers = await timerAPI.getActive();
+      // A timer operation may have started while this request was in flight -
+      // its result is newer than ours, so drop this response
+      if (get().timerOperationInProgress || get().timerMutationCount !== mutationCount) {
+        console.log('[TimerSync] Discarding stale sync - timer was mutated meanwhile');
+        return;
+      }
       console.log('[TimerSync] Loaded timers from server:', timers?.length || 0);
-      set({ activeTimers: Array.isArray(timers) ? timers : [] });
+      const nextTimers = Array.isArray(timers) ? timers : [];
+      // Keep the existing array identity when nothing changed, otherwise every
+      // subscriber re-renders on each poll
+      if (JSON.stringify(nextTimers) === JSON.stringify(get().activeTimers)) return;
+      set({ activeTimers: nextTimers });
     } catch (error) {
       console.error('Failed to load active timers:', error);
       // Don't clear timers on error - keep existing state
@@ -312,7 +322,7 @@ const useStore = create((set, get) => ({
   },
   
   startTimer: async (projectId, taskId) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       const timer = await timerAPI.start(projectId, taskId);
       set({ activeTimers: [...get().activeTimers, timer] });
@@ -323,7 +333,7 @@ const useStore = create((set, get) => ({
   },
   
   pauseTimer: async (timerId) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       const timer = await timerAPI.pause(timerId);
       set({
@@ -338,7 +348,7 @@ const useStore = create((set, get) => ({
   },
   
   resumeTimer: async (timerId) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       const timer = await timerAPI.resume(timerId);
       set({
@@ -353,7 +363,7 @@ const useStore = create((set, get) => ({
   },
   
   stopTimer: async (timerId, notes, intervals, options = {}) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       const entry = await timerAPI.stop(timerId, notes, intervals, options);
       set({
@@ -366,7 +376,7 @@ const useStore = create((set, get) => ({
   },
   
   discardTimer: async (timerId) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       await timerAPI.discard(timerId);
       set({
@@ -378,7 +388,7 @@ const useStore = create((set, get) => ({
   },
 
   updateTimerStartTime: async (timerId, startTime) => {
-    set({ timerOperationInProgress: true });
+    set({ timerOperationInProgress: true, timerMutationCount: get().timerMutationCount + 1 });
     try {
       const timer = await timerAPI.updateStartTime(timerId, startTime);
       set({

@@ -1,11 +1,13 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, Notification, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const https = require('http');
 
 // Hide dock icon
 app.dock?.hide();
 
 let tray = null;
+let hasTrayIcon = false;
 let authWindow = null;
 let token = null;
 let workspaceId = null;
@@ -188,7 +190,7 @@ function updateTrayTitle() {
     const icon = primaryTimer.is_running ? '🟢' : '🟡';
     tray.setTitle(`${icon} ${timeStr}`);
   } else {
-    tray.setTitle('⏱️');
+    tray.setTitle(hasTrayIcon ? '' : '⏱️');
   }
 }
 
@@ -297,17 +299,12 @@ app.whenReady().then(async () => {
   
   // Create tray
   const iconPath = path.join(__dirname, 'assets', 'iconTemplate.png');
-  let icon;
-  
-  try {
-    icon = nativeImage.createFromPath(iconPath);
-  } catch (e) {
-    // Create a simple icon if file doesn't exist
-    icon = nativeImage.createEmpty();
-  }
-  
+  const icon = nativeImage.createFromPath(iconPath);
+  hasTrayIcon = !icon.isEmpty();
+  if (hasTrayIcon) icon.setTemplateImage(true);
+
   tray = new Tray(icon);
-  tray.setTitle('⏱️');
+  tray.setTitle(hasTrayIcon ? '' : '⏱️');
   
   // Load session from shared file (synced with browser)
   loadLocalSession();
@@ -367,7 +364,6 @@ ipcMain.handle('login', async (event, email, password) => {
     const workspaces = await apiRequest('GET', '/workspaces');
     if (workspaces.length > 0) {
       workspaceId = workspaces[0].id;
-      saveConfig();
       fetchActiveTimers();
       updateTrayMenu();
       

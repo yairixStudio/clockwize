@@ -9,6 +9,7 @@ build/
 # Environment / local config
 .env
 .env.*
+!.env.example
 .server-port
 .local-session
 

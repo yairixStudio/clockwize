@@ -186,7 +186,7 @@ router.get('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
          WHERE p.client_id = c.id AND (p.pricing_type IS NULL OR p.pricing_type != 'no_charge') AND (t.pricing_type IS NULL OR t.pricing_type != 'no_charge')) as billable_time
       FROM clients c
       LEFT JOIN client_sources cs ON c.source_id = cs.id
-      WHERE c.id = ? AND (c.workspace_id = ? OR c.workspace_id IS NULL) AND c.user_id = ?
+      WHERE c.id = ? AND (c.workspace_id = ? OR (c.workspace_id IS NULL AND c.user_id = ?))
     `).get(req.params.id, req.workspaceId, req.userId);
 
     if (!client) {
@@ -258,7 +258,7 @@ router.patch('/:id/favorite', authMiddleware, workspaceMiddleware, (req, res) =>
     const db = getDb(req);
     const { is_favorite } = req.body;
 
-    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });
     }
@@ -282,7 +282,7 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     const { name, address, phone, email, bank_name, bank_account, bank_branch, tax_id, notes, hourly_rate, status, is_favorite, morning_id, source_id, sub_source, aliases, domains } = req.body;
 
-    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });
     }
@@ -347,7 +347,7 @@ router.delete('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     
     // First check if the client exists and belongs to this workspace
-    const client = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const client = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     
     if (!client) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });

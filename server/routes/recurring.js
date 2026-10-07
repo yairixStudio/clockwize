@@ -113,7 +113,7 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       client_id || null,
       project_id || null,
       req.workspaceId,
-      req.user.id,
+      req.userId,
       type,
       amount,
       interval,

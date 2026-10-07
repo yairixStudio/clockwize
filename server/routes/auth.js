@@ -115,6 +115,11 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'החשבון הושהה. נא פנה למנהל המערכת' });
     }
 
+    // Passkey-only accounts have no password
+    if (!user.password) {
+      return res.status(401).json({ error: 'חשבון זה משתמש ב-Passkey בלבד — התחבר עם Passkey' });
+    }
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'אימייל או סיסמה שגויים' });
