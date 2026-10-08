@@ -94,6 +94,8 @@ function createWindow() {
     }
   });
 
+  // Automated tests (desktop/tests) keep their windows invisible so they don't flash on screen
+  if (process.env.CLOCKWIZE_E2E_INVISIBLE) mainWindow.setOpacity(0);
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('resize', saveWindowState);
   mainWindow.on('move', saveWindowState);

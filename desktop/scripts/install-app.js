@@ -143,6 +143,13 @@ if (fs.existsSync(TARGET)) {
 step(`Installing to ${TARGET}`);
 run('ditto', [built, TARGET]);
 run(LSREGISTER, ['-f', TARGET]);
+// The Dock caches the icon of a pinned app by file; after the bundle is replaced it can show a
+// grey placeholder until it reloads. Refresh it when Clockwize is pinned.
+execFileSync('touch', [TARGET]);
+try {
+  const pinned = execFileSync('defaults', ['read', 'com.apple.dock', 'persistent-apps'], { encoding: 'utf8' }).includes(BUNDLE_ID);
+  if (pinned) execFileSync('killall', ['Dock']);
+} catch { /* Dock not running or not readable - nothing to refresh */ }
 if (widget && identity) {
   // Make the widget show up in the widget gallery and in Control Center right away
   try { execFileSync('pluginkit', ['-a', path.join(TARGET, 'Contents', 'PlugIns', 'ClockwizeWidget.appex')]); } catch { /* registered on first launch anyway */ }

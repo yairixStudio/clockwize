@@ -84,6 +84,7 @@ function createMenuBar({ state, showWindow, openInApp }) {
     });
     // No setVisibleOnAllWorkspaces() here: on macOS it flips the app to a UIElement process,
     // which removes the Dock icon. A 'panel' window already shows on every Space.
+    if (process.env.CLOCKWIZE_E2E_INVISIBLE) popover.setOpacity(0);
     popover.loadFile(path.join(__dirname, '..', 'popover.html'));
     popover.on('blur', () => {
       if (!popover.webContents.isDevToolsOpened()) {
