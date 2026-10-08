@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, shell, screen } = require('electron');
-const { resolveProjectRoot, saveProjectRoot, isProjectRoot, readAppConfig } = require('./lib/project-root');
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, shell, screen, systemPreferences } = require('electron');
+const { resolveProjectRoot, saveProjectRoot, isProjectRoot, readAppConfig, readUserConfig, saveUserConfig } = require('./lib/project-root');
 const { startServer } = require('./lib/server');
 const { createTimerState } = require('./lib/timer-state');
 const { createMenuBar } = require('./lib/tray');
@@ -171,16 +171,46 @@ function showWindow() {
 
 function openInApp(route) {
   showWindow();
-  if (serverPort) mainWindow.loadURL(`${appUrl()}${route}`);
+  if (serverPort && !needsUnlock()) mainWindow.loadURL(`${appUrl()}${route}`);
 }
 
 function showLoading(params = {}) {
   mainWindow?.loadFile(LOADING_PAGE, { query: params });
 }
 
+// ---------- Touch ID lock ----------
+// The session itself never expires on this computer; instead the app can ask for Touch ID once
+// when it starts (Clockwize menu → "נעילה עם Touch ID בפתיחה", on by default).
+
+let unlocked = false;
+const touchIdLockEnabled = () => readUserConfig().touchIdLock !== false;
+const touchIdAvailable = () =>
+  process.platform === 'darwin' && !process.env.CLOCKWIZE_E2E_INVISIBLE && systemPreferences.canPromptTouchID();
+const needsUnlock = () => !unlocked && touchIdLockEnabled() && touchIdAvailable();
+
+async function unlockWithTouchId() {
+  try {
+    await systemPreferences.promptTouchID('לפתוח את Clockwize');
+    unlocked = true;
+    loadCurrentPage();
+    return true;
+  } catch {
+    showLoading({ locked: '1' });
+    return false;
+  }
+}
+
 function loadCurrentPage() {
-  if (serverPort) mainWindow.loadURL(appUrl());
-  else showLoading();
+  if (!serverPort) return showLoading();
+  if (needsUnlock()) {
+    showLoading({ locked: '1' });
+    unlockWithTouchId();
+    return;
+  }
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (pendingSession) adoptSession(pendingSession).catch(() => {});
+  });
+  mainWindow.loadURL(appUrl());
 }
 
 // ---------- Server ----------
@@ -222,7 +252,7 @@ async function bootServer() {
     });
     serverChild = child;
     serverPort = port;
-    mainWindow?.loadURL(appUrl());
+    if (mainWindow) loadCurrentPage();
     timerState?.refresh({ withSummary: true });
   } catch (error) {
     showLoading({ error: error.message, details: error.details || '' });
@@ -241,14 +271,23 @@ ipcMain.handle('clockwize:choose-folder', async () => {
   if (await chooseProjectFolder()) await bootServer();
 });
 ipcMain.handle('clockwize:open-logs', () => shell.openPath(serverLogFile()));
+ipcMain.handle('clockwize:unlock', () => unlockWithTouchId());
 ipcMain.handle('clockwize:browser-login', () => {
   if (serverPort) shell.openExternal(`${appUrl()}/login?passkey=desktop`);
 });
 
 // When the window is signed out and a valid session shows up (passkey sign-in in the browser,
 // or an earlier browser login), sign the window in with it and bring the app forward
-async function adoptSession({ token, workspaceId }) {
-  if (!mainWindow || mainWindow.isDestroyed() || !isAppUrl(mainWindow.webContents.getURL())) return;
+let pendingSession = null;
+
+async function adoptSession(session) {
+  const { token, workspaceId } = session;
+  // Not showing the app yet (still starting, or locked): adopt once the app page has loaded
+  if (!mainWindow || mainWindow.isDestroyed() || !isAppUrl(mainWindow.webContents.getURL())) {
+    pendingSession = session;
+    return;
+  }
+  pendingSession = null;
   const signedIn = await mainWindow.webContents
     .executeJavaScript("Boolean(localStorage.getItem('token'))")
     .catch(() => true);
@@ -270,6 +309,14 @@ function buildAppMenu() {
       label: 'Clockwize',
       submenu: [
         { role: 'about', label: 'אודות Clockwize' },
+        { type: 'separator' },
+        {
+          label: 'נעילה עם Touch ID בפתיחה',
+          type: 'checkbox',
+          checked: touchIdLockEnabled(),
+          enabled: process.platform === 'darwin' && systemPreferences.canPromptTouchID(),
+          click: (item) => saveUserConfig({ touchIdLock: item.checked })
+        },
         { type: 'separator' },
         { label: 'פתח את קובץ הלוג של השרת', click: () => shell.openPath(serverLogFile()) },
         { label: 'הצג את תיקיית הפרויקט', click: () => projectRoot && shell.openPath(projectRoot) },

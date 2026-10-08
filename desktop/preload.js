@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('clockwizeDesktop', {
   retry: () => ipcRenderer.invoke('clockwize:retry'),
   chooseFolder: () => ipcRenderer.invoke('clockwize:choose-folder'),
   openLogs: () => ipcRenderer.invoke('clockwize:open-logs'),
+  unlock: () => ipcRenderer.invoke('clockwize:unlock'),
   // Passkeys need the browser's native sheet - sign in there, the app adopts the session
   openBrowserLogin: () => ipcRenderer.invoke('clockwize:browser-login')
 });

@@ -6,6 +6,7 @@ const useStore = create((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  connectionError: false, // the server didn't answer while restoring the session (retrying)
   
   // Workspace state
   workspaces: [],
@@ -34,16 +35,18 @@ const useStore = create((set, get) => ({
   enabledAddons: ['credentials', 'files', 'notes'], // default enabled
   
   // Initialize auth from token
-  initAuth: async () => {
+  initAuth: async (attempt = 0) => {
     const token = localStorage.getItem('token');
     if (!token) {
-      set({ isLoading: false });
+      set({ isLoading: false, connectionError: false });
       return;
     }
     
     try {
       const data = await authAPI.getMe();
-      const { workspaces, currentWorkspace, ...user } = data;
+      const { workspaces, currentWorkspace, token: refreshedToken, ...user } = data;
+      // Sliding session: the server swaps day-old tokens for fresh ones
+      if (refreshedToken) localStorage.setItem('token', refreshedToken);
       
       // Restore workspace from localStorage or use first one
       const savedWorkspaceId = localStorage.getItem('currentWorkspaceId');
@@ -73,6 +76,7 @@ const useStore = create((set, get) => ({
         workspaceRole: activeWorkspace?.role || null,
         isAuthenticated: true,
         isLoading: false,
+        connectionError: false,
         enabledAddons: loadedAddons
       });
 
@@ -80,9 +84,16 @@ const useStore = create((set, get) => ({
       get().loadActiveTimers();
       get().loadIntegrations();
     } catch (error) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('currentWorkspaceId');
-      set({ isLoading: false });
+      // Only a rejected session signs out. A server that is still starting (the desktop app,
+      // a dev restart) or a dropped connection keeps the session and tries again.
+      if ([401, 403, 404].includes(error?.status)) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('currentWorkspaceId');
+        set({ isLoading: false, connectionError: false });
+        return;
+      }
+      set({ connectionError: true });
+      setTimeout(() => get().initAuth(attempt + 1), Math.min(1000 * 2 ** attempt, 10000));
     }
   },
   

@@ -64,15 +64,22 @@ const JoinWorkspace = lazyPage(() => import('./pages/JoinWorkspace'));
 const CatalogPage = lazyPage(() => import('./pages/CatalogPage'));
 
 // Protected Route
+// Shown while the session is being restored; says so when the server is slow to answer
+const SessionLoading = () => {
+  const connectionError = useStore((state) => state.connectionError);
+  return (
+    <div className="loading" style={{ height: '100vh', flexDirection: 'column', gap: '1rem' }}>
+      <div className="spinner"></div>
+      {connectionError && <p className="text-muted" role="status">מתחבר לשרת…</p>}
+    </div>
+  );
+};
+
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useStore();
 
   if (isLoading) {
-    return (
-      <div className="loading" style={{ height: '100vh' }}>
-        <div className="spinner"></div>
-      </div>
-    );
+    return <SessionLoading />;
   }
 
   return isAuthenticated ? children : <Navigate to="/login" replace />;
@@ -95,11 +102,7 @@ const GuestRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useStore();
 
   if (isLoading) {
-    return (
-      <div className="loading" style={{ height: '100vh' }}>
-        <div className="spinner"></div>
-      </div>
-    );
+    return <SessionLoading />;
   }
 
   if (isAuthenticated && new URLSearchParams(window.location.search).get('passkey') === 'desktop') {
