@@ -53,3 +53,13 @@ playwright-report/
 test-results/
 blob-report/
 playwright/.cache/
+
+# iCloud Drive conflict copies ("file 2.js") - the project lives in iCloud
+* [0-9].js
+* [0-9].jsx
+* [0-9].mjs
+* [0-9].css
+* [0-9].json
+* [0-9].md
+* [0-9].swift
+* [0-9].html
