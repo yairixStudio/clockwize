@@ -87,14 +87,17 @@ router.get('/dashboard', authMiddleware, workspaceMiddleware, (req, res) => {
     let isCustomRange = false;
 
     if (customStartDate && customEndDate) {
-      // Custom date range mode - use UTC boundaries
+      // The client sends the user's local start-of-day / end-of-day (a custom range, or the
+      // selected month together with month/year) as full ISO instants, used as-is - the server
+      // cannot know the user's timezone. A plain YYYY-MM-DD (older callers) still means the whole UTC day.
+      const isPlainDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
       periodStart = new Date(customStartDate);
-      periodStart.setUTCHours(0, 0, 0, 0);
+      if (isPlainDate(req.query.startDate)) periodStart.setUTCHours(0, 0, 0, 0);
       periodEnd = new Date(customEndDate);
-      periodEnd.setUTCHours(23, 59, 59, 999);
-      isCustomRange = true;
+      if (isPlainDate(req.query.endDate)) periodEnd.setUTCHours(23, 59, 59, 999);
+      isCustomRange = requestedMonth === null || requestedYear === null;
     } else if (requestedMonth !== null && requestedYear !== null) {
-      // Specific month requested - build in UTC
+      // Specific month requested without instants (older callers) - build in UTC
       periodStart = new Date(Date.UTC(requestedYear, requestedMonth, 1));
       const lastDay = new Date(Date.UTC(requestedYear, requestedMonth + 1, 0)).getUTCDate();
       periodEnd = new Date(Date.UTC(requestedYear, requestedMonth, lastDay, 23, 59, 59, 999));
@@ -112,10 +115,9 @@ router.get('/dashboard', authMiddleware, workspaceMiddleware, (req, res) => {
     let activeSecondsPeriod = 0;
     let activeSecondsTotal = 0;
 
-    // Check if period includes today (UTC)
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-    const periodIncludesToday = periodStart <= todayEnd && periodEnd >= todayStart;
+    // Periods are whole days of the caller (local days, or UTC days for plain dates), so the
+    // period includes today exactly when it contains the current instant
+    const periodIncludesToday = periodStart <= now && now <= periodEnd;
 
     // Always calculate activeSecondsTotal for all-time stat
     const activeTimers = db.prepare('SELECT start_time, accumulated_seconds, is_running FROM active_timers WHERE user_id = ? AND workspace_id = ?').all(req.userId, req.workspaceId);
@@ -128,23 +130,22 @@ router.get('/dashboard', authMiddleware, workspaceMiddleware, (req, res) => {
       }
       activeSecondsTotal += timerDuration;
 
-      // Calculate proportional period attribution for active timers
-      if (periodIncludesToday) {
-        const timerStartMs = new Date(timer.start_time).getTime();
-        const timerEndMs = nowMs;
-        const clockSpan = timerEndMs - timerStartMs;
+      // Calculate proportional period attribution for active timers. The overlap decides, so a
+      // timer running since before midnight also counts its share for yesterday.
+      const timerStartMs = new Date(timer.start_time).getTime();
+      const timerEndMs = nowMs;
+      const clockSpan = timerEndMs - timerStartMs;
 
-        if (clockSpan <= 0) {
-          activeSecondsPeriod += timerDuration;
-          return;
-        }
+      if (clockSpan <= 0) {
+        if (periodIncludesToday) activeSecondsPeriod += timerDuration;
+        return;
+      }
 
-        const overlapStart = Math.max(timerStartMs, periodStart.getTime());
-        const overlapEnd = Math.min(timerEndMs, periodEnd.getTime());
+      const overlapStart = Math.max(timerStartMs, periodStart.getTime());
+      const overlapEnd = Math.min(timerEndMs, periodEnd.getTime());
 
-        if (overlapEnd > overlapStart) {
-          activeSecondsPeriod += Math.round(timerDuration * ((overlapEnd - overlapStart) / clockSpan));
-        }
+      if (overlapEnd > overlapStart) {
+        activeSecondsPeriod += Math.round(timerDuration * ((overlapEnd - overlapStart) / clockSpan));
       }
     });
 

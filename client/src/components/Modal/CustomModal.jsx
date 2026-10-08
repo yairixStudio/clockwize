@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import './CustomModal.css';
@@ -22,9 +22,12 @@ function CustomModal({
   isPrompt = false,
   promptValue = '',
   placeholder = '',
+  inputType = 'text',
+  autoComplete,
   onConfirm,
   onCancel
 }) {
+  const messageId = useId();
   const confirmBtnRef = useRef(null);
   const inputRef = useRef(null);
   const [inputValue, setInputValue] = useState('');
@@ -83,12 +86,14 @@ function CustomModal({
         
         <h3 className="custom-modal__title">{title}</h3>
         
-        <p className="custom-modal__message">{message}</p>
+        <p className="custom-modal__message" id={messageId}>{message}</p>
         
         {isPrompt && (
           <input
             ref={inputRef}
-            type="text"
+            type={inputType}
+            autoComplete={autoComplete}
+            aria-labelledby={messageId}
             className="custom-modal__input"
             placeholder={placeholder}
             value={inputValue}

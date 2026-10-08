@@ -227,9 +227,9 @@ function CatalogPage() {
                       <div className="catalog-item-price">
                         <DollarSign size={16} />
                         <span className="price-value ltr">
-                          {item.price ? formatCurrency(item.price) : 'לא הוגדר'}
+                          {item.price != null ? formatCurrency(item.price) : 'לא הוגדר'}
                         </span>
-                        {item.price && (
+                        {item.price != null && (
                           <span className="price-type">
                             / {item.unit || getPricingTypeLabel(item.pricing_type)}
                           </span>

@@ -1,6 +1,7 @@
 import express from 'express';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
 import bcrypt from 'bcryptjs';
+import { deleteUserAccount } from './workspaces.js';
 
 const router = express.Router();
 
@@ -52,6 +53,11 @@ router.post('/impersonate/:userId', (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'משתמש לא נמצא' });
     }
+
+    // Such a user's session tokens are refused until they set a new password (authMiddleware)
+    if (user.force_password_reset === 1) {
+      return res.status(409).json({ error: 'המשתמש נדרש להגדיר סיסמה חדשה - לא ניתן להתחבר בשמו עד שיעשה זאת' });
+    }
     
     const token = generateToken(user.id);
     
@@ -87,7 +93,8 @@ router.post('/users/:userId/force-password-reset', (req, res) => {
       return res.status(403).json({ error: 'לא ניתן לאפס סיסמת אדמין' });
     }
     
-    db.prepare('UPDATE users SET force_password_reset = 1 WHERE id = ?').run(userId);
+    // Also ends every session the user has now: they come back only through the reset
+    db.prepare('UPDATE users SET force_password_reset = 1, sessions_valid_after = ? WHERE id = ?').run(Date.now(), userId);
     
     res.json({ message: 'המשתמש יידרש לשנות סיסמה בהתחברות הבאה' });
   } catch (error) {
@@ -118,7 +125,9 @@ router.post('/users/:userId/set-password', async (req, res) => {
     }
     
     const hashedPassword = await bcrypt.hash(password, 10);
-    db.prepare('UPDATE users SET password = ?, force_password_reset = 0 WHERE id = ?').run(hashedPassword, userId);
+    // A password set by the admin also signs the user out everywhere
+    db.prepare('UPDATE users SET password = ?, force_password_reset = 0, sessions_valid_after = ? WHERE id = ?')
+      .run(hashedPassword, Date.now(), userId);
     
     res.json({ message: 'סיסמה שונתה בהצלחה' });
   } catch (error) {
@@ -172,8 +181,8 @@ router.delete('/users/:userId', (req, res) => {
       return res.status(403).json({ error: 'לא ניתן למחוק חשבון אדמין' });
     }
     
-    // Delete user (CASCADE will handle related records)
-    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    // Personal workspaces go with the account; what the user created in shared workspaces stays there
+    deleteUserAccount(db, userId);
     
     res.json({ message: 'חשבון נמחק בהצלחה' });
   } catch (error) {

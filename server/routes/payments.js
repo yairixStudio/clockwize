@@ -487,11 +487,11 @@ router.put('/:id/status', authMiddleware, workspaceMiddleware, (req, res) => {
             return res.status(404).json({ error: 'תשלום לא נמצא' });
         }
 
-        // Set paid_date when marking as paid
+        // Set paid_date when marking as paid, clear it for any other status (like PUT /:id)
         const paidDate = status === 'paid' ? new Date().toISOString() : null;
 
         db.prepare(`
-            UPDATE payments SET status = ?, paid_date = COALESCE(?, paid_date) WHERE id = ?
+            UPDATE payments SET status = ?, paid_date = ? WHERE id = ?
         `).run(status, paidDate, id);
 
         // Update project paid amount

@@ -138,7 +138,7 @@ describe('initAuth', () => {
 
 describe('login / register / logout', () => {
   it('login stores the token and workspace and returns the full response', async () => {
-    const response = { user, token: 'new-token', workspaces: [wsA], currentWorkspace: wsA, requiresPasswordReset: true };
+    const response = { user, token: 'new-token', workspaces: [wsA], currentWorkspace: wsA, requiresPasswordReset: false };
     authAPI.login.mockResolvedValue(response);
     addonsAPI.getEnabled.mockResolvedValue(['files']);
 
@@ -156,6 +156,20 @@ describe('login / register / logout', () => {
       enabledAddons: ['files']
     });
     expect(timerAPI.getActive).toHaveBeenCalled();
+  });
+
+  it('a login that still requires a password reset is not a session: nothing is stored', async () => {
+    const response = { requiresPasswordReset: true, resetToken: 'reset-jwt' };
+    authAPI.login.mockResolvedValue(response);
+
+    const result = await state().login('dana@example.com', 'secret');
+
+    expect(result).toBe(response);
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('currentWorkspaceId')).toBeNull();
+    expect(state()).toMatchObject({ user: null, isAuthenticated: false, currentWorkspace: null, workspaces: [] });
+    expect(addonsAPI.getEnabled).not.toHaveBeenCalled();
+    expect(timerAPI.getActive).not.toHaveBeenCalled();
   });
 
   it('login handles a user without workspaces', async () => {
@@ -351,7 +365,7 @@ describe('workspaces', () => {
 describe('permission helpers', () => {
   it.each([
     ['owner', { manage: true, invite: true, viewAll: true }],
-    ['admin', { manage: false, invite: true, viewAll: true }],
+    ['admin', { manage: true, invite: true, viewAll: true }],
     ['member', { manage: false, invite: false, viewAll: false }],
     [null, { manage: false, invite: false, viewAll: false }]
   ])('role %s', (role, expected) => {
@@ -359,6 +373,21 @@ describe('permission helpers', () => {
     expect(state().canManageWorkspace()).toBe(expected.manage);
     expect(state().canInviteMembers()).toBe(expected.invite);
     expect(state().canViewAllTimeEntries()).toBe(expected.viewAll);
+  });
+
+  it('only the owner deletes the workspace and changes roles (never the owner\'s own)', () => {
+    useStore.setState({ workspaceRole: 'owner' });
+    expect(state().canDeleteWorkspace()).toBe(true);
+    expect(state().canChangeMemberRole('admin')).toBe(true);
+    expect(state().canChangeMemberRole('member')).toBe(true);
+    expect(state().canChangeMemberRole('owner')).toBe(false);
+
+    for (const role of ['admin', 'member', null]) {
+      useStore.setState({ workspaceRole: role });
+      expect(state().canDeleteWorkspace()).toBe(false);
+      expect(state().canChangeMemberRole('member')).toBe(false);
+      expect(state().canChangeMemberRole('admin')).toBe(false);
+    }
   });
 
   it('canRemoveMember: owners remove anyone, admins only members', () => {
@@ -569,6 +598,35 @@ describe('integrations and stats', () => {
     statsAPI.getDashboard.mockRejectedValueOnce(new Error('x'));
     await state().loadDashboardStats();
     expect(state().dashboardStats).toEqual({ hours: 5 });
+  });
+
+  it('loadDashboardStats remembers the period it loaded', async () => {
+    const range = { startDate: '2026-08-31T21:00:00.000Z', endDate: '2026-09-30T21:00:00.000Z' };
+    await state().loadDashboardStats(range);
+    expect(state().dashboardStatsParams).toEqual(range);
+
+    // Back to the default period: the remembered one follows
+    await state().loadDashboardStats({});
+    expect(state().dashboardStatsParams).toEqual({});
+  });
+
+  it('switching workspace reloads the stats for the period the dashboard shows', async () => {
+    const range = { startDate: '2026-08-31T21:00:00.000Z', endDate: '2026-09-30T21:00:00.000Z' };
+    await state().loadDashboardStats(range);
+    statsAPI.getDashboard.mockClear();
+
+    state().setCurrentWorkspace(wsB);
+
+    await vi.waitFor(() => expect(statsAPI.getDashboard).toHaveBeenCalledWith(range));
+    expect(statsAPI.getDashboard).toHaveBeenCalledTimes(1);
+  });
+
+  it('logout forgets the remembered stats period', async () => {
+    await state().loadDashboardStats({ month: 9, year: 2026 });
+
+    state().logout();
+
+    expect(state().dashboardStatsParams).toEqual({});
   });
 });
 

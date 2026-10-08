@@ -254,14 +254,25 @@ describe('credentials API', () => {
     expect(after.password).not.toContain('p2');
   });
 
-  // Bug: PUT keeps service_name/url when they are omitted, but silently wipes the encrypted
-  // username/password/notes to NULL (the UI always sends every field, so it is API-only).
-  it.fails('keeps stored secrets when a partial update omits them', async () => {
+  it('keeps stored secrets when a partial update omits them', async () => {
     const user = await createUser();
     const created = await user.post('/api/credentials').send({ service_name: 'S', username: 'keep-me', password: 'keep-pass', notes: 'keep-notes' });
+    const before = rawCredential(user.db, created.body.id);
     const res = await user.put(`/api/credentials/${created.body.id}`).send({ url: 'https://new.example.com' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ username: 'keep-me', password: 'keep-pass', notes: 'keep-notes' });
+    expect(res.body).toMatchObject({ username: 'keep-me', password: 'keep-pass', notes: 'keep-notes', url: 'https://new.example.com' });
+    // The stored ciphertext is kept as-is, not re-encrypted
+    expect(rawCredential(user.db, created.body.id).password).toBe(before.password);
+  });
+
+  it('an explicit null or empty string clears only that secret', async () => {
+    const user = await createUser();
+    const created = await user.post('/api/credentials').send({ service_name: 'S', username: 'u', password: 'p', notes: 'n' });
+    const noNotes = await user.put(`/api/credentials/${created.body.id}`).send({ notes: null });
+    expect(noNotes.body).toMatchObject({ username: 'u', password: 'p', notes: null });
+    const noUser = await user.put(`/api/credentials/${created.body.id}`).send({ username: '' });
+    expect(noUser.body).toMatchObject({ username: null, password: 'p', notes: null });
+    expect(rawCredential(user.db, created.body.id).username).toBeNull();
   });
 
   it('deletes and then 404s', async () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import useStore from '../store/useStore';
 import { formatDuration } from '../utils/format';
@@ -7,6 +7,7 @@ import './TimerConflictModal.css';
 
 function TimerConflictModal({ onCancel, onContinue, onStopTimer, targetProject, targetTask }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const { activeTimers, stopTimer } = useStore();
   const [selectedTimerId, setSelectedTimerId] = useState(null);
   const [notes, setNotes] = useState('');
@@ -64,8 +65,9 @@ function TimerConflictModal({ onCancel, onContinue, onStopTimer, targetProject, 
             </div>
             
             <div className="form-group">
-              <label className="form-label">הערות לטיימר שנעצר (אופציונלי)</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>הערות לטיימר שנעצר (אופציונלי)</label>
               <textarea 
+                id={`${uid}-notes`}
                 className="form-input"
                 value={notes}
                 onChange={e => setNotes(e.target.value)}

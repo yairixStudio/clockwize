@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Pause, Square, X as XIcon, User, Timer, Plus, Trash2, Edit2, Link2 } from 'lucide-react';
@@ -220,6 +220,7 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
   const updateTimerStartTime = useStore(s => s.updateTimerStartTime);
   const modal = useModal();
   const navigate = useNavigate();
+  const uid = useId();
   const [showStopModal, setShowStopModal] = useState(false);
   const [selectedTimer, setSelectedTimer] = useState(null);
   const [notes, setNotes] = useState('');
@@ -1095,8 +1096,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                 <>
                   {/* Client selector */}
                   <div className="form-group">
-                    <label className="form-label">לקוח</label>
+                    <label className="form-label" htmlFor={`${uid}-client`}>לקוח</label>
                     <select
+                      id={`${uid}-client`}
                       className="form-input"
                       value={selectedClientId}
                       onChange={handleClientChange}
@@ -1112,8 +1114,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
 
                   {/* Project selector */}
                   <div className="form-group">
-                    <label className="form-label">פרויקט</label>
+                    <label className="form-label" htmlFor={`${uid}-project`}>פרויקט</label>
                     <select
+                      id={`${uid}-project`}
                       className="form-input"
                       value={showNewProject ? '__new__' : selectedProjectId}
                       onChange={handleProjectChange}
@@ -1156,8 +1159,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
 
                   {/* Task selector */}
                   <div className="form-group">
-                    <label className="form-label">משימה (אופציונלי)</label>
+                    <label className="form-label" htmlFor={`${uid}-task`}>משימה (אופציונלי)</label>
                     <select
+                      id={`${uid}-task`}
                       className="form-input"
                       value={showNewTask ? '__new__' : selectedTaskId}
                       onChange={handleTaskChange}
@@ -1201,8 +1205,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                   {/* Subtask selector */}
                   {selectedTaskId && subtasks.length > 0 && (
                     <div className="form-group">
-                      <label className="form-label">תת-משימה (אופציונלי)</label>
+                      <label className="form-label" htmlFor={`${uid}-subtask`}>תת-משימה (אופציונלי)</label>
                       <select
+                        id={`${uid}-subtask`}
                         className="form-input"
                         value={selectedSubtaskId}
                         onChange={handleSubtaskChange}
@@ -1341,8 +1346,8 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                                   <span className="interval-edit-number">{index + 1}</span>
                                   
                                   <div className="interval-edit-fields">
-                                    <div className="interval-edit-row">
-                                      <label>התחלה:</label>
+                                    <div className="interval-edit-row" role="group" aria-labelledby={`${uid}-start-label-${index}`}>
+                                      <label id={`${uid}-start-label-${index}`}>התחלה:</label>
                                       <input
                                         type="date"
                                         value={interval.start_date_input || formatDateForInput(interval.start_time)}
@@ -1358,8 +1363,8 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                                         dir="ltr"
                                       />
                                     </div>
-                                    <div className="interval-edit-row">
-                                      <label>סיום:</label>
+                                    <div className="interval-edit-row" role="group" aria-labelledby={`${uid}-end-label-${index}`}>
+                                      <label id={`${uid}-end-label-${index}`}>סיום:</label>
                                       <input
                                         type="date"
                                         value={interval.end_date_input || formatDateForInput(interval.end_time)}
@@ -1418,8 +1423,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                   )}
 
                   <div className="form-group">
-                    <label className="form-label">הערות (אופציונלי)</label>
+                    <label className="form-label" htmlFor={`${uid}-notes`}>הערות (אופציונלי)</label>
                     <textarea 
+                      id={`${uid}-notes`}
                       className="form-input"
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
@@ -1465,8 +1471,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label className="form-label">תאריך</label>
+                <label className="form-label" htmlFor={`${uid}-edit-start-date`}>תאריך</label>
                 <input
+                  id={`${uid}-edit-start-date`}
                   type="date"
                   value={editStartDate}
                   onChange={(e) => setEditStartDate(e.target.value)}
@@ -1475,8 +1482,9 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">שעה</label>
+                <label className="form-label" htmlFor={`${uid}-edit-start-time`}>שעה</label>
                 <input
+                  id={`${uid}-edit-start-time`}
                   type="time"
                   value={editStartTime}
                   onChange={(e) => setEditStartTime(e.target.value)}

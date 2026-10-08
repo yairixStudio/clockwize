@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Trash2 } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -8,6 +8,7 @@ import { useModal } from './Modal/ModalContext';
 
 function ClientModal({ client, onSave, onClose, onDelete }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const modal = useModal();
   const formRef = useRef(null);
   const [formData, setFormData] = useState({
@@ -219,8 +220,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
           <div className="modal-body">
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">שם לקוח *</label>
+                <label className="form-label" htmlFor={`${uid}-name`}>שם לקוח *</label>
                 <input
+                  id={`${uid}-name`}
                   type="text"
                   name="name"
                   className="form-input"
@@ -231,8 +233,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">סטטוס</label>
+                <label className="form-label" htmlFor={`${uid}-status`}>סטטוס</label>
                 <select
+                  id={`${uid}-status`}
                   name="status"
                   className="form-input"
                   defaultValue={formData.status}
@@ -248,7 +251,7 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">כינויים לחיפוש</label>
+              <label className="form-label" htmlFor={`${uid}-new-alias`}>כינויים לחיפוש</label>
               <div className="aliases-container">
                 {aliases.length > 0 && (
                   <div className="aliases-tags">
@@ -268,6 +271,7 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
                 )}
                 <div className="alias-input-row">
                   <input
+                    id={`${uid}-new-alias`}
                     type="text"
                     className="form-input"
                     placeholder="הוסף כינוי..."
@@ -290,7 +294,7 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">דומיינים (לזיהוי אוטומטי)</label>
+              <label className="form-label" htmlFor={`${uid}-new-domain`}>דומיינים (לזיהוי אוטומטי)</label>
               <div className="aliases-container">
                 {domains.length > 0 && (
                   <div className="aliases-tags">
@@ -310,6 +314,7 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
                 )}
                 <div className="alias-input-row">
                   <input
+                    id={`${uid}-new-domain`}
                     type="text"
                     className="form-input"
                     placeholder="zrp.co.il"
@@ -334,10 +339,11 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">מקור הגעה</label>
+                <label className="form-label" htmlFor={`${uid}-source_id`}>מקור הגעה</label>
                 {!showNewSourceInput ? (
                   <div className="source-select-wrapper" style={{ display: 'flex', gap: '8px' }}>
                     <select
+                      id={`${uid}-source_id`}
                       name="source_id"
                       className="form-input"
                       value={formData.source_id}
@@ -363,6 +369,7 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
                 ) : (
                   <div className="new-source-input" style={{ display: 'flex', gap: '8px' }}>
                     <input
+                      id={`${uid}-source_id`}
                       type="text"
                       className="form-input"
                       placeholder="שם המקור החדש..."
@@ -389,8 +396,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">אימייל</label>
+                <label className="form-label" htmlFor={`${uid}-email`}>אימייל</label>
                 <input
+                  id={`${uid}-email`}
                   type="email"
                   name="email"
                   className="form-input"
@@ -403,8 +411,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
 
             {isReferralSource && (
               <div className="form-group">
-                <label className="form-label">תת מקור (מי הפנה?)</label>
+                <label className="form-label" htmlFor={`${uid}-sub_source`}>תת מקור (מי הפנה?)</label>
                 <input
+                  id={`${uid}-sub_source`}
                   type="text"
                   name="sub_source"
                   className="form-input"
@@ -417,8 +426,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">טלפון</label>
+                <label className="form-label" htmlFor={`${uid}-phone`}>טלפון</label>
                 <input
+                  id={`${uid}-phone`}
                   type="tel"
                   name="phone"
                   className="form-input"
@@ -429,8 +439,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">ח.פ / מספר עוסק</label>
+                <label className="form-label" htmlFor={`${uid}-tax_id`}>ח.פ / מספר עוסק</label>
                 <input
+                  id={`${uid}-tax_id`}
                   type="text"
                   name="tax_id"
                   className="form-input"
@@ -442,8 +453,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">כתובת</label>
+              <label className="form-label" htmlFor={`${uid}-address`}>כתובת</label>
               <input
+                id={`${uid}-address`}
                 type="text"
                 name="address"
                 className="form-input"
@@ -456,8 +468,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
 
             <div className="form-row form-row-3">
               <div className="form-group">
-                <label className="form-label">שם הבנק</label>
+                <label className="form-label" htmlFor={`${uid}-bank_name`}>שם הבנק</label>
                 <input
+                  id={`${uid}-bank_name`}
                   type="text"
                   name="bank_name"
                   className="form-input"
@@ -467,8 +480,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">סניף</label>
+                <label className="form-label" htmlFor={`${uid}-bank_branch`}>סניף</label>
                 <input
+                  id={`${uid}-bank_branch`}
                   type="text"
                   name="bank_branch"
                   className="form-input"
@@ -479,8 +493,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">מספר חשבון</label>
+                <label className="form-label" htmlFor={`${uid}-bank_account`}>מספר חשבון</label>
                 <input
+                  id={`${uid}-bank_account`}
                   type="text"
                   name="bank_account"
                   className="form-input"
@@ -492,8 +507,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">מחיר לשעה (₪)</label>
+              <label className="form-label" htmlFor={`${uid}-hourly_rate`}>מחיר לשעה (₪)</label>
               <input
+                id={`${uid}-hourly_rate`}
                 type="number"
                 name="hourly_rate"
                 className="form-input"
@@ -507,8 +523,9 @@ function ClientModal({ client, onSave, onClose, onDelete }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">📝 פתק פרטי (לעצמך)</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>📝 פתק פרטי (לעצמך)</label>
               <textarea
+                id={`${uid}-notes`}
                 name="notes"
                 className="form-input notes-input"
                 defaultValue={formData.notes}

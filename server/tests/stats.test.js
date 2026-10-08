@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { getApp, createUser } from './helpers.js';
 import { addEntry, backdateTimer } from './helpers-core.js';
@@ -99,6 +99,111 @@ describe('stats - dashboard', () => {
 
     const span = await user.get('/api/stats/dashboard?startDate=2025-02-01&endDate=2025-04-30');
     expect(span.body.time.thisMonth).toBe(3600 + 1800 + 14400);
+  });
+
+  // The dashboard sends the user's local calendar days as explicit instants (Israel is UTC+3 in October)
+  it('uses explicit ISO instants as-is, so local calendar days work east of UTC', async () => {
+    const user = await createUser();
+    const client = (await user.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await user.post('/api/projects').send({ client_id: client.id, name: 'P' })).body;
+    // 01:00-01:30 on Oct 8 in Israel = 22:00-22:30 UTC on Oct 7
+    await addEntry(user, { project_id: project.id, start: '2026-10-07T22:00:00.000Z', seconds: 1800 });
+    // .query() encodes the "+" of an offset (a raw "+" in a URL would arrive as a space)
+    const range = async (startDate, endDate) => (await user.get('/api/stats/dashboard').query({ startDate, endDate })).body;
+
+    // Oct 8 in Israel, as the UTC ISO of local midnight / end of day
+    const oct8 = await range('2026-10-07T21:00:00.000Z', '2026-10-08T20:59:59.999Z');
+    expect(oct8.time.thisMonth).toBe(1800);
+    expect(oct8.selectedPeriod).toMatchObject({
+      startDate: '2026-10-07T21:00:00.000Z',
+      endDate: '2026-10-08T20:59:59.999Z',
+      isCustomRange: true
+    });
+
+    // The same day written with an explicit offset
+    const withOffset = await range('2026-10-08T00:00:00+03:00', '2026-10-08T23:59:59.999+03:00');
+    expect(withOffset.time.thisMonth).toBe(1800);
+    expect(withOffset.selectedPeriod.startDate).toBe('2026-10-07T21:00:00.000Z');
+    expect(withOffset.selectedPeriod.endDate).toBe('2026-10-08T20:59:59.999Z');
+
+    // Oct 7 in Israel ends at 21:00 UTC, before the entry
+    expect((await range('2026-10-06T21:00:00.000Z', '2026-10-07T20:59:59.999Z')).time.thisMonth).toBe(0);
+
+    // Plain dates still mean whole UTC days (older callers): the entry is on Oct 7 in UTC
+    expect((await range('2026-10-08', '2026-10-08')).time.thisMonth).toBe(0);
+    expect((await range('2026-10-07', '2026-10-07')).time.thisMonth).toBe(1800);
+  });
+
+  // The dashboard's month view sends the user's local month as instants, next to month/year
+  it('month mode uses the local month instants when sent, and UTC months for month/year alone', async () => {
+    const user = await createUser();
+    const client = (await user.post('/api/clients').send({ name: 'C' })).body;
+    const project = (await user.post('/api/projects').send({ client_id: client.id, name: 'P' })).body;
+    // 01:00-01:30 on Nov 1 in Israel (UTC+2 after the DST switch) = 23:00-23:30 UTC on Oct 31
+    await addEntry(user, { project_id: project.id, start: '2026-10-31T23:00:00.000Z', seconds: 1800 });
+    const get = async (query) => (await user.get('/api/stats/dashboard').query(query)).body;
+
+    // November in Israel: Nov 1 00:00 (+02:00) to Nov 30 23:59:59.999 (+02:00)
+    const nov = await get({ month: 10, year: 2026, startDate: '2026-10-31T22:00:00.000Z', endDate: '2026-11-30T21:59:59.999Z' });
+    expect(nov.time.thisMonth).toBe(1800);
+    expect(nov.selectedPeriod).toMatchObject({
+      startDate: '2026-10-31T22:00:00.000Z',
+      endDate: '2026-11-30T21:59:59.999Z',
+      isCustomRange: false
+    });
+
+    // October in Israel starts at +03:00 and ends at +02:00 - the entry is not in it
+    const oct = await get({ month: 9, year: 2026, startDate: '2026-09-30T21:00:00.000Z', endDate: '2026-10-31T21:59:59.999Z' });
+    expect(oct.time.thisMonth).toBe(0);
+
+    // month/year alone (older callers) still means the UTC month: the entry is on Oct 31 in UTC
+    expect((await get({ month: 10, year: 2026 })).time.thisMonth).toBe(0);
+    const utcOct = await get({ month: 9, year: 2026 });
+    expect(utcOct.time.thisMonth).toBe(1800);
+    expect(utcOct.selectedPeriod).toMatchObject({ startDate: '2026-10-01T00:00:00.000Z', isCustomRange: false });
+  });
+
+  it('periodIncludesToday follows the period that was sent, not the UTC day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // 01:30 on Oct 8 in Israel - still Oct 7 in UTC
+      vi.setSystemTime(new Date('2026-10-07T22:30:00.000Z'));
+      const user = await createUser();
+      const get = async (startDate, endDate) => (await user.get('/api/stats/dashboard').query({ startDate, endDate })).body.selectedPeriod;
+
+      expect((await get('2026-10-07T21:00:00.000Z', '2026-10-08T20:59:59.999Z')).periodIncludesToday).toBe(true); // local Oct 8
+      expect((await get('2026-10-06T21:00:00.000Z', '2026-10-07T20:59:59.999Z')).periodIncludesToday).toBe(false); // local Oct 7
+      expect((await get('2026-10-01T00:00:00+03:00', '2026-10-31T23:59:59.999+02:00')).periodIncludesToday).toBe(true);
+      // Plain dates are UTC days: now is on Oct 7 in UTC
+      expect((await get('2026-10-07', '2026-10-07')).periodIncludesToday).toBe(true);
+      expect((await get('2026-10-08', '2026-10-08')).periodIncludesToday).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a timer running since before local midnight counts its share for yesterday too', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // 08:30 on Oct 8 in Israel; the timer started at 23:30 on Oct 7 (20:30 UTC), 9 hours ago
+      vi.setSystemTime(new Date('2026-10-08T05:30:00.000Z'));
+      const user = await createUser();
+      const client = (await user.post('/api/clients').send({ name: 'C' })).body;
+      const project = (await user.post('/api/projects').send({ client_id: client.id, name: 'P' })).body;
+      const running = (await user.post('/api/timer/start').send({ project_id: project.id })).body;
+      backdateTimer(user.db, running.id, 9 * 3600);
+      const get = async (startDate, endDate) => (await user.get('/api/stats/dashboard').query({ startDate, endDate })).body;
+
+      const yesterday = await get('2026-10-06T21:00:00.000Z', '2026-10-07T20:59:59.999Z');
+      expect(yesterday.selectedPeriod.periodIncludesToday).toBe(false);
+      near(yesterday.time.thisMonth, 1800); // 23:30-24:00
+      const today = await get('2026-10-07T21:00:00.000Z', '2026-10-08T20:59:59.999Z');
+      expect(today.selectedPeriod.periodIncludesToday).toBe(true);
+      near(today.time.thisMonth, 8.5 * 3600); // 00:00-08:30
+      near(today.time.total, 9 * 3600);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('attributes a zero-span entry to its start day', async () => {

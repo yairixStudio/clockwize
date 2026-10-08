@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import request from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
+import initSqlJs from 'sql.js';
 import { getApp, createUser, createClientProjectTask } from './helpers.js';
 import { addMember, ENCRYPTED_SHAPE, legacyEncrypt } from './helpers-money.js';
+import { adminClient } from './helpers-core.js';
 
 let app;
 let cryptoUtil;
@@ -61,11 +63,19 @@ describe('catalog', () => {
     expect((await user.get(`/api/catalog/${it_.id}`)).body.name).toBe('Site v2');
   });
 
-  // Bug: `price || null` turns a free (price 0) item into "no price"
-  it.fails('keeps a price of 0', async () => {
+  // `price || null` used to turn a free (price 0) item into "no price"
+  it('keeps a price of 0', async () => {
     const user = await createUser();
     const res = await item(user, { name: 'Free consult', price: 0 });
     expect(res.body.price).toBe(0);
+
+    const paid = (await item(user, { name: 'Paid', price: 100 })).body;
+    const updated = await user.put(`/api/catalog/${paid.id}`).send({ name: 'Paid', price: 0 });
+    expect(updated.body.price).toBe(0);
+
+    // An empty or missing price is still "no price"
+    expect((await item(user, { name: 'Empty', price: '' })).body.price).toBeNull();
+    expect((await user.put(`/api/catalog/${paid.id}`).send({ name: 'Paid' })).body.price).toBeNull();
   });
 
   it('deletes and then 404s', async () => {
@@ -114,9 +124,10 @@ describe('client sources', () => {
   it('lists the workspace\'s own sources plus global ones, never another workspace\'s', async () => {
     const alice = await createUser();
     const bob = await createUser();
+    const admin = await adminClient();
     const own = (await source(alice, { name: uniq('Own') })).body;
     const bobs = (await source(bob, { name: uniq('Bobs') })).body;
-    const global = (await source(bob, { name: uniq('Global'), is_global: true })).body;
+    const global = (await source(admin, { name: uniq('Global'), is_global: true })).body;
     expect(global.workspace_id).toBeNull();
 
     const ids = (await alice.get('/api/client-sources')).body.map(s => s.id);
@@ -129,7 +140,7 @@ describe('client sources', () => {
     const alice = await createUser();
     const bob = await createUser();
     const ref = (await source(alice, { name: uniq('Referral') })).body;
-    const global = (await source(alice, { name: uniq('Shared Global'), is_global: true })).body;
+    const global = (await source(await adminClient(), { name: uniq('Shared Global'), is_global: true })).body;
     const c1 = (await alice.post('/api/clients').send({ name: 'C1', source_id: ref.id, sub_source: 'Moshe' })).body;
     await alice.post('/api/clients').send({ name: 'C2', source_id: ref.id });
     await alice.post('/api/clients').send({ name: 'C3', source_id: global.id });
@@ -148,21 +159,53 @@ describe('client sources', () => {
     expect(JSON.stringify(res.body)).not.toContain('Bob client');
   });
 
-  it('assigns a global source to the current workspace once', async () => {
-    const alice = await createUser();
+  it('a system admin assigns a global source to their current workspace once', async () => {
+    const admin = await adminClient();
     const bob = await createUser();
-    const global = (await source(alice, { name: uniq('Claimable'), is_global: true })).body;
+    const global = (await source(admin, { name: uniq('Claimable'), is_global: true })).body;
     const bobs = (await source(bob, { name: uniq('Bob private') })).body;
 
-    expect((await alice.post(`/api/client-sources/${uuidv4()}/assign-to-workspace`)).status).toBe(404);
-    const res = await alice.post(`/api/client-sources/${global.id}/assign-to-workspace`);
+    expect((await admin.post(`/api/client-sources/${uuidv4()}/assign-to-workspace`)).status).toBe(404);
+    const res = await admin.post(`/api/client-sources/${global.id}/assign-to-workspace`);
     expect(res.status).toBe(200);
-    expect(res.body.workspace_id).toBe(alice.workspaceId);
-    expect((await alice.post(`/api/client-sources/${global.id}/assign-to-workspace`)).status).toBe(400);
+    expect(res.body.workspace_id).toBe(admin.workspaceId);
+    expect((await admin.post(`/api/client-sources/${global.id}/assign-to-workspace`)).status).toBe(400);
 
     // Another workspace's own source cannot be taken over
-    expect((await alice.post(`/api/client-sources/${bobs.id}/assign-to-workspace`)).status).toBe(400);
-    expect(alice.db.prepare('SELECT workspace_id FROM client_sources WHERE id = ?').get(bobs.id).workspace_id).toBe(bob.workspaceId);
+    expect((await admin.post(`/api/client-sources/${bobs.id}/assign-to-workspace`)).status).toBe(400);
+    expect(admin.db.prepare('SELECT workspace_id FROM client_sources WHERE id = ?').get(bobs.id).workspace_id).toBe(bob.workspaceId);
+  });
+
+  // A global source shows up in every workspace, so a regular user must not be able to create one
+  // (planting a name in everyone's list) or claim one for their own workspace (taking it from everyone)
+  it('only a system admin creates global sources; a workspace owner or admin role is not enough', async () => {
+    const owner = await createUser();
+    const wsAdmin = await createUser();
+    addMember(owner, wsAdmin, 'admin');
+    const name = uniq('Everywhere');
+
+    for (const [user, ws] of [[owner, owner.workspaceId], [wsAdmin, owner.workspaceId]]) {
+      const res = await user.post('/api/client-sources', ws).send({ name, is_global: true });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBeTruthy();
+    }
+    expect(owner.db.prepare('SELECT COUNT(*) AS n FROM client_sources WHERE name = ?').get(name).n).toBe(0);
+
+    // Without the flag the source is created in the user's own workspace
+    const own = await source(owner, { name });
+    expect(own.status).toBe(201);
+    expect(own.body.workspace_id).toBe(owner.workspaceId);
+  });
+
+  it('a regular user cannot claim a global source for their workspace', async () => {
+    const admin = await adminClient();
+    const user = await createUser();
+    const global = (await source(admin, { name: uniq('Not yours'), is_global: true })).body;
+
+    const res = await user.post(`/api/client-sources/${global.id}/assign-to-workspace`);
+    expect(res.status).toBe(403);
+    expect(user.db.prepare('SELECT workspace_id FROM client_sources WHERE id = ?').get(global.id).workspace_id).toBeNull();
+    expect((await user.get('/api/client-sources')).body.map(s => s.id)).toContain(global.id);
   });
 });
 
@@ -218,14 +261,126 @@ describe('addons', () => {
     expect((await bob.get('/api/addons/enabled')).body).not.toContain('catalog');
   });
 
-  // Bug (database.js, not fixed here): user_addons has UNIQUE(user_id, addon_id), so a member of
-  // two workspaces gets a 500 the first time they toggle an addon in their second workspace
-  it.fails('a member of two workspaces can toggle the same addon in both', async () => {
+  // user_addons used to be UNIQUE(user_id, addon_id), so a member of two workspaces got a 500 the
+  // first time they toggled an addon in their second workspace
+  it('a member of two workspaces can toggle the same addon in both', async () => {
     const owner = await createUser();
     const member = await createUser();
     addMember(owner, member, 'admin');
     expect((await member.put('/api/addons/catalog').send({ isEnabled: true })).status).toBe(200);
     expect((await member.put('/api/addons/catalog', owner.workspaceId).send({ isEnabled: true })).status).toBe(200);
+    expect((await member.put('/api/addons', owner.workspaceId).send({ addons: [{ id: 'notes', isEnabled: false }] })).status).toBe(200);
+    expect((await member.put('/api/addons').send({ addons: [{ id: 'notes', isEnabled: false }] })).status).toBe(200);
+
+    // Each workspace keeps its own state
+    await member.put('/api/addons/catalog', owner.workspaceId).send({ isEnabled: false });
+    expect((await member.get('/api/addons/enabled')).body).toContain('catalog');
+    expect((await owner.get('/api/addons/enabled')).body).not.toContain('catalog');
+    const rows = member.db.prepare("SELECT workspace_id FROM user_addons WHERE addon_id = 'catalog' AND workspace_id IN (?, ?)").all(owner.workspaceId, member.workspaceId);
+    expect(rows).toHaveLength(2);
+  });
+
+  // Turning an addon on or off changes the workspace for everyone, so it is an owner/admin decision
+  it('a plain member cannot toggle addons; the owner and a workspace admin can', async () => {
+    const owner = await createUser();
+    const admin = await createUser();
+    const member = await createUser();
+    addMember(owner, admin, 'admin');
+    addMember(owner, member, 'member');
+    const ws = owner.workspaceId;
+
+    expect((await member.put('/api/addons/files', ws).send({ isEnabled: false })).status).toBe(403);
+    expect((await member.put('/api/addons', ws).send({ addons: [{ id: 'files', isEnabled: false }] })).status).toBe(403);
+    expect(owner.db.prepare('SELECT COUNT(*) AS n FROM user_addons WHERE workspace_id = ?').get(ws).n).toBe(0);
+    expect((await member.get('/api/addons/enabled', ws)).body).toContain('files');
+
+    expect((await admin.put('/api/addons/catalog', ws).send({ isEnabled: true })).status).toBe(200);
+    expect((await owner.put('/api/addons/files').send({ isEnabled: false })).status).toBe(200);
+    const enabled = (await member.get('/api/addons/enabled', ws)).body;
+    expect(enabled).toContain('catalog');
+    expect(enabled).not.toContain('files');
+
+    // A member still manages their own personal workspace
+    expect((await member.put('/api/addons/catalog').send({ isEnabled: true })).status).toBe(200);
+  });
+
+  describe('user_addons unique key migration', () => {
+    const OLD_SCHEMA = `CREATE TABLE user_addons (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      addon_id TEXT NOT NULL,
+      is_enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, workspace_id TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, addon_id)
+    )`;
+
+    // A throwaway database with the pre-migration user_addons table
+    async function oldDatabase() {
+      const { Database } = await import('../database.js');
+      const SQL = await initSqlJs();
+      const db = new Database(new SQL.Database());
+      db.pragma('foreign_keys = ON');
+      db.exec('CREATE TABLE users (id TEXT PRIMARY KEY)');
+      db.exec(OLD_SCHEMA);
+      for (const id of ['u1', 'u2']) db.prepare('INSERT INTO users (id) VALUES (?)').run(id);
+      return db;
+    }
+    const uniqueKeys = (db) => db.prepare(`SELECT name FROM pragma_index_list('user_addons') WHERE "unique" = 1 AND origin = 'u'`).all()
+      .map(i => db.prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno').all(i.name).map(c => c.name));
+    const allRows = (db) => db.prepare('SELECT id, user_id, workspace_id, addon_id, is_enabled, created_at, updated_at FROM user_addons ORDER BY id').all();
+
+    it('rebuilds the table keyed by workspace, keeps every row, and runs only once', async () => {
+      const { migrateUserAddonsUniqueKey } = await import('../database.js');
+      const db = await oldDatabase();
+      const insert = db.prepare(`INSERT INTO user_addons (id, user_id, workspace_id, addon_id, is_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      insert.run('a', 'u1', 'w1', 'catalog', 1, '2025-01-01 10:00:00', '2025-01-02 10:00:00');
+      insert.run('b', 'u1', 'w1', 'files', 0, '2025-01-01 10:00:00', '2025-01-01 10:00:00');
+      insert.run('c', 'u2', 'w2', 'catalog', 0, '2025-02-01 10:00:00', '2025-02-01 10:00:00');
+      insert.run('d', 'u2', null, 'notes', 1, '2025-02-01 10:00:00', '2025-02-01 10:00:00');
+      const before = allRows(db);
+
+      expect(migrateUserAddonsUniqueKey(db)).toBe(true);
+      expect(uniqueKeys(db)).toEqual([['workspace_id', 'addon_id']]);
+      expect(allRows(db)).toEqual(before);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'user_addons_new'").get().n).toBe(0);
+
+      // Idempotent: a second start changes nothing
+      expect(migrateUserAddonsUniqueKey(db)).toBe(false);
+      expect(allRows(db)).toEqual(before);
+
+      // The bug is gone: the same user can now have the addon in a second workspace...
+      insert.run('e', 'u1', 'w2b', 'catalog', 1, '2025-03-01 10:00:00', '2025-03-01 10:00:00');
+      // ...and the foreign key to users still holds
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(() => insert.run('f', 'ghost', 'w3', 'catalog', 1, null, null)).toThrow();
+      } finally {
+        errors.mockRestore();
+      }
+      db.prepare('DELETE FROM users WHERE id = ?').run('u2');
+      expect(allRows(db).map(r => r.id)).toEqual(['a', 'b', 'e']);
+    });
+
+    it('leaves the old table untouched when the rows do not fit the new key', async () => {
+      const { migrateUserAddonsUniqueKey } = await import('../database.js');
+      const db = await oldDatabase();
+      // Two users toggled the same addon in one workspace - allowed by the old key, not by the new one
+      db.prepare(`INSERT INTO user_addons (id, user_id, workspace_id, addon_id) VALUES ('a', 'u1', 'w1', 'catalog')`).run();
+      db.prepare(`INSERT INTO user_addons (id, user_id, workspace_id, addon_id) VALUES ('b', 'u2', 'w1', 'catalog')`).run();
+      const before = allRows(db);
+
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(migrateUserAddonsUniqueKey(db)).toBe(false);
+      } finally {
+        errors.mockRestore();
+      }
+      expect(uniqueKeys(db)).toEqual([['user_id', 'addon_id']]);
+      expect(allRows(db)).toEqual(before);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'user_addons_new'").get().n).toBe(0);
+    });
   });
 
   describe('settings', () => {
@@ -310,6 +465,32 @@ describe('addons', () => {
       expect(cryptoUtil.decryptDetailed(row.setting_value, user.workspaceId)).toEqual({ value: 'sk-legacy-abcdefgh', legacy: false });
     });
 
+    it('only the owner or a workspace admin changes settings; a member only sees whether a key is configured', async () => {
+      const owner = await createUser();
+      const admin = await createUser();
+      const member = await createUser();
+      addMember(owner, admin, 'admin');
+      addMember(owner, member, 'member');
+      const ws = owner.workspaceId;
+      const { getAddonSetting } = await import('../routes/addons.js');
+      await owner.put('/api/addons/ai_assistant/settings').send({ openai_api_key: 'sk-owner-key-1234567890', model: 'gpt-4o' });
+
+      const denied = await member.put('/api/addons/ai_assistant/settings', ws).send({ openai_api_key: 'sk-member-override-0000' });
+      expect(denied.status).toBe(403);
+      expect(denied.body.error).toBeTruthy();
+      expect(await getAddonSetting(owner.db, ws, owner.user.id, 'ai_assistant', 'openai_api_key')).toBe('sk-owner-key-1234567890');
+
+      const seen = await member.get('/api/addons/ai_assistant/settings', ws);
+      expect(seen.status).toBe(200);
+      expect(seen.body).toEqual({ openai_api_key_configured: true, model: 'gpt-4o' });
+      expect(JSON.stringify(seen.body)).not.toContain('sk-o');
+
+      expect((await owner.get('/api/addons/ai_assistant/settings')).body.openai_api_key).toBe('sk-o****7890');
+      expect((await admin.get('/api/addons/ai_assistant/settings', ws)).body.openai_api_key).toBe('sk-o****7890');
+      expect((await admin.put('/api/addons/ai_assistant/settings', ws).send({ openai_api_key: 'sk-admin-rotated-12345' })).status).toBe(200);
+      expect(await getAddonSetting(owner.db, ws, owner.user.id, 'ai_assistant', 'openai_api_key')).toBe('sk-admin-rotated-12345');
+    });
+
     it('settings are isolated between workspaces, and a stolen ciphertext does not decrypt elsewhere', async () => {
       const alice = await createUser();
       const bob = await createUser();
@@ -325,6 +506,81 @@ describe('addons', () => {
       expect(read.openai_api_key_configured).toBe(false);
       expect(JSON.stringify(read)).not.toContain('alice');
     });
+  });
+});
+
+describe('integrations unique key migration', () => {
+  const OLD_SCHEMA = `CREATE TABLE integrations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      api_key TEXT,
+      api_secret TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      expires_at DATETIME,
+      settings TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, workspace_id TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, provider)
+    )`;
+  const COLUMNS = 'id, user_id, workspace_id, provider, api_key, api_secret, access_token, refresh_token, expires_at, settings, is_active, created_at, updated_at';
+
+  async function oldDatabase() {
+    const { Database } = await import('../database.js');
+    const SQL = await initSqlJs();
+    const db = new Database(new SQL.Database());
+    db.pragma('foreign_keys = ON');
+    db.exec('CREATE TABLE users (id TEXT PRIMARY KEY)');
+    db.exec(OLD_SCHEMA);
+    for (const id of ['u1', 'u2']) db.prepare('INSERT INTO users (id) VALUES (?)').run(id);
+    return db;
+  }
+  const uniqueKeys = (db) => db.prepare(`SELECT name FROM pragma_index_list('integrations') WHERE "unique" = 1 AND origin = 'u'`).all()
+    .map(i => db.prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno').all(i.name).map(c => c.name));
+  const allRows = (db) => db.prepare(`SELECT ${COLUMNS} FROM integrations ORDER BY id`).all();
+  const quiet = (fn) => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try { return fn(); } finally { errors.mockRestore(); }
+  };
+
+  it('rebuilds the table keyed by workspace + provider, keeps every row and column, and runs only once', async () => {
+    const { migrateIntegrationsUniqueKey } = await import('../database.js');
+    const db = await oldDatabase();
+    const insert = db.prepare(`INSERT INTO integrations (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insert.run('a', 'u1', 'w1', 'morning', 'key', 'secret', 'tok', 'ref', '2026-01-01', '{"x":1}', 1, '2025-01-01 10:00:00', '2025-01-02 10:00:00');
+    insert.run('b', 'u2', 'w2', 'morning', null, null, null, null, null, null, 0, '2025-02-01 10:00:00', '2025-02-01 10:00:00');
+    const before = allRows(db);
+
+    expect(migrateIntegrationsUniqueKey(db)).toBe(true);
+    expect(uniqueKeys(db)).toEqual([['workspace_id', 'provider']]);
+    expect(allRows(db)).toEqual(before);
+    expect(migrateIntegrationsUniqueKey(db)).toBe(false);
+    expect(allRows(db)).toEqual(before);
+
+    // The same user can now connect the provider in a second workspace, but a workspace has one connection
+    insert.run('c', 'u1', 'w3', 'morning', null, null, null, null, null, null, 1, null, null);
+    expect(() => quiet(() => insert.run('d', 'u2', 'w3', 'morning', null, null, null, null, null, null, 1, null, null))).toThrow();
+    expect(() => quiet(() => insert.run('e', 'ghost', 'w4', 'morning', null, null, null, null, null, null, 1, null, null))).toThrow();
+  });
+
+  it('leaves the old table untouched when two connections share a workspace + provider', async () => {
+    const { migrateIntegrationsUniqueKey } = await import('../database.js');
+    const db = await oldDatabase();
+    db.prepare(`INSERT INTO integrations (id, user_id, workspace_id, provider) VALUES ('a', 'u1', 'w1', 'morning')`).run();
+    db.prepare(`INSERT INTO integrations (id, user_id, workspace_id, provider) VALUES ('b', 'u2', 'w1', 'morning')`).run();
+    const before = allRows(db);
+    expect(quiet(() => migrateIntegrationsUniqueKey(db))).toBe(false);
+    expect(uniqueKeys(db)).toEqual([['user_id', 'provider']]);
+    expect(allRows(db)).toEqual(before);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'integrations_new'").get().n).toBe(0);
+  });
+
+  it('the app database already uses the new key', async () => {
+    const { db } = await getApp();
+    expect(uniqueKeys(db)).toEqual([['workspace_id', 'provider']]);
   });
 });
 

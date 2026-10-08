@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Timer, Plus, Trash2, ChevronDown, ChevronUp, Link2, Sparkles, FolderOpen, CheckSquare } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -7,6 +7,7 @@ import { formatDurationHuman } from '../utils/format';
 
 function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, startTime: propStartTime, endTime: propEndTime, isFromTimer = false, onSave, onClose }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const formRef = useRef(null);
 
   // Intervals state
@@ -620,8 +621,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
             )}
 
             <div className="form-group">
-              <label className="form-label">לקוח</label>
+              <label className="form-label" htmlFor={`${uid}-client_id`}>לקוח</label>
               <select
+                id={`${uid}-client_id`}
                 name="client_id"
                 className="form-input"
                 value={formData.client_id}
@@ -671,8 +673,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
             )}
 
             <div className="form-group">
-              <label className="form-label">פרויקט (אופציונלי)</label>
+              <label className="form-label" htmlFor={`${uid}-project_id`}>פרויקט (אופציונלי)</label>
               <select
+                id={`${uid}-project_id`}
                 name="project_id"
                 className="form-input"
                 value={showNewProject ? '__new__' : formData.project_id}
@@ -715,8 +718,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
             </div>
 
             <div className="form-group">
-              <label className="form-label">משימה (אופציונלי)</label>
+              <label className="form-label" htmlFor={`${uid}-task_id`}>משימה (אופציונלי)</label>
               <select
+                id={`${uid}-task_id`}
                 name="task_id"
                 className="form-input"
                 value={showNewTask ? '__new__' : formData.task_id}
@@ -760,8 +764,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
 
             {formData.task_id && subtasks.length > 0 && (
               <div className="form-group">
-                <label className="form-label">תת-משימה (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-subtask_id`}>תת-משימה (אופציונלי)</label>
                 <select
+                  id={`${uid}-subtask_id`}
                   name="subtask_id"
                   className="form-input"
                   value={formData.subtask_id}
@@ -879,8 +884,8 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                       <span className="interval-edit-number">{index + 1}</span>
 
                       <div className="interval-edit-fields">
-                        <div className="interval-edit-row">
-                          <label>התחלה:</label>
+                        <div className="interval-edit-row" role="group" aria-labelledby={`${uid}-start-label-${index}`}>
+                          <label id={`${uid}-start-label-${index}`}>התחלה:</label>
                           <input
                             type="date"
                             value={interval.start_date_input || formatDateForInput(interval.start_time)}
@@ -896,8 +901,8 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                             dir="ltr"
                           />
                         </div>
-                        <div className="interval-edit-row">
-                          <label>סיום:</label>
+                        <div className="interval-edit-row" role="group" aria-labelledby={`${uid}-end-label-${index}`}>
+                          <label id={`${uid}-end-label-${index}`}>סיום:</label>
                           <input
                             type="date"
                             value={interval.end_date_input || formatDateForInput(interval.end_time)}
@@ -958,8 +963,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                 {formData.use_duration ? (
                   <>
                     <div className="form-group">
-                      <label className="form-label">תאריך</label>
+                      <label className="form-label" htmlFor={`${uid}-start_date`}>תאריך</label>
                       <input
+                        id={`${uid}-start_date`}
                         type="date"
                         name="start_date"
                         className="form-input"
@@ -971,8 +977,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">שעת התחלה</label>
+                      <label className="form-label" htmlFor={`${uid}-start_time`}>שעת התחלה</label>
                       <input
+                        id={`${uid}-start_time`}
                         type="time"
                         name="start_time"
                         className="form-input"
@@ -985,8 +992,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label className="form-label">שעות</label>
+                        <label className="form-label" htmlFor={`${uid}-duration_hours`}>שעות</label>
                         <input
+                          id={`${uid}-duration_hours`}
                           type="number"
                           name="duration_hours"
                           className="form-input"
@@ -998,8 +1006,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                         />
                       </div>
                       <div className="form-group">
-                        <label className="form-label">דקות</label>
+                        <label className="form-label" htmlFor={`${uid}-duration_minutes`}>דקות</label>
                         <input
+                          id={`${uid}-duration_minutes`}
                           type="number"
                           name="duration_minutes"
                           className="form-input"
@@ -1017,8 +1026,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                   <div className="time-range-container">
                     <div className="form-row time-row">
                       <div className="form-group date-group">
-                        <label className="form-label">תאריך התחלה</label>
+                        <label className="form-label" htmlFor={`${uid}-start_date`}>תאריך התחלה</label>
                         <input
+                          id={`${uid}-start_date`}
                           type="date"
                           name="start_date"
                           className="form-input"
@@ -1029,8 +1039,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                         />
                       </div>
                       <div className="form-group time-group">
-                        <label className="form-label">שעה</label>
+                        <label className="form-label" htmlFor={`${uid}-start_time`}>שעה</label>
                         <input
+                          id={`${uid}-start_time`}
                           type="time"
                           name="start_time"
                           className="form-input"
@@ -1044,8 +1055,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
 
                     <div className="form-row time-row">
                       <div className="form-group date-group">
-                        <label className="form-label">תאריך סיום</label>
+                        <label className="form-label" htmlFor={`${uid}-end_date`}>תאריך סיום</label>
                         <input
+                          id={`${uid}-end_date`}
                           type="date"
                           name="end_date"
                           className="form-input"
@@ -1056,8 +1068,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
                         />
                       </div>
                       <div className="form-group time-group">
-                        <label className="form-label">שעה</label>
+                        <label className="form-label" htmlFor={`${uid}-end_time`}>שעה</label>
                         <input
+                          id={`${uid}-end_time`}
                           type="time"
                           name="end_time"
                           className="form-input"
@@ -1085,8 +1098,9 @@ function TimeEntryModal({ entry, projectId, taskId, clientId, durationSeconds, s
             )}
 
             <div className="form-group">
-              <label className="form-label">הערות</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>הערות</label>
               <textarea
+                id={`${uid}-notes`}
                 name="notes"
                 className="form-input"
                 value={formData.notes}

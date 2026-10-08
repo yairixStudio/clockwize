@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Play, Pause, Square, Edit2, Trash2, Clock, Bell, FileText, DollarSign, CreditCard, AlertCircle, CheckCircle2, CheckSquare, TrendingUp, Folder, StickyNote, ListChecks, ChevronDown, ChevronUp } from 'lucide-react';
@@ -31,6 +31,7 @@ function TaskDetail() {
   const outletContext = useOutletContext();
   const setStats = outletContext?.setStats;
   const modal = useModal();
+  const uid = useId();
   const { activeTimers, startTimer, pauseTimer, resumeTimer, stopTimer, getTimerForProject, integrations, isAddonEnabled } = useStore();
 
   const [task, setTask] = useState(null);
@@ -998,8 +999,9 @@ function TaskDetail() {
               <div className="time-range-section">
                 <div className="time-range-row">
                   <div className="form-group">
-                    <label className="form-label">תאריך התחלה</label>
+                    <label className="form-label" htmlFor={`${uid}-stop-start-date`}>תאריך התחלה</label>
                     <input
+                      id={`${uid}-stop-start-date`}
                       type="date"
                       className="form-input"
                       value={stopStartDate}
@@ -1008,8 +1010,9 @@ function TaskDetail() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">שעה</label>
+                    <label className="form-label" htmlFor={`${uid}-stop-start-time`}>שעה</label>
                     <input
+                      id={`${uid}-stop-start-time`}
                       type="time"
                       className="form-input"
                       value={stopStartTime}
@@ -1021,8 +1024,9 @@ function TaskDetail() {
 
                 <div className="time-range-row">
                   <div className="form-group">
-                    <label className="form-label">תאריך סיום</label>
+                    <label className="form-label" htmlFor={`${uid}-stop-end-date`}>תאריך סיום</label>
                     <input
+                      id={`${uid}-stop-end-date`}
                       type="date"
                       className="form-input"
                       value={stopEndDate}
@@ -1031,8 +1035,9 @@ function TaskDetail() {
                     />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">שעה</label>
+                    <label className="form-label" htmlFor={`${uid}-stop-end-time`}>שעה</label>
                     <input
+                      id={`${uid}-stop-end-time`}
                       type="time"
                       className="form-input"
                       value={stopEndTime}
@@ -1057,8 +1062,9 @@ function TaskDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                 <textarea
+                  id={`${uid}-stop-notes`}
                   className="form-input"
                   value={stopNotes}
                   onChange={e => setStopNotes(e.target.value)}

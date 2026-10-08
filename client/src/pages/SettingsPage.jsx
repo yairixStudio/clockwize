@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { Check, Key, Plug, Puzzle, Settings, Save, FileText, StickyNote, Info, X, Filter, Target, Bell, Package, Sparkles, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import PasskeysManager from '../components/PasskeysManager';
 import api, { addonsAPI, authAPI } from '../services/api';
@@ -21,7 +21,10 @@ const ADDON_ICONS = {
 function SettingsPage() {
   const [activeTab, setActiveTab] = useState('integrations');
   const modal = useModal();
-  const { user, updateUser, loadEnabledAddons } = useStore();
+  const uid = useId();
+  const { user, updateUser, loadEnabledAddons, workspaceRole } = useStore();
+  // תוספים והגדרותיהם חלים על כל ה-workspace - רק בעלים או מנהל משנים אותם (השרת אוכף זאת)
+  const canManageAddons = workspaceRole === 'owner' || workspaceRole === 'admin';
 
   // Integrations state
   const [integrations, setIntegrations] = useState([]);
@@ -276,6 +279,12 @@ function SettingsPage() {
                   הערה: כיבוי תוסף לא מוחק את הנתונים שכבר שמרת. אם תפעיל את התוסף מחדש, הנתונים יהיו שם.
                 </span>
               </div>
+              {!canManageAddons && (
+                <div className="addons-info-banner">
+                  <Info size={20} />
+                  <span>רק הבעלים או מנהל ה-workspace יכולים להפעיל, לכבות ולהגדיר תוספים.</span>
+                </div>
+              )}
 
               {loadingAddons ? (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -320,7 +329,7 @@ function SettingsPage() {
                           <button
                             className={`addon-toggle ${addon.isEnabled ? 'toggle-on' : 'toggle-off'}`}
                             onClick={() => handleToggleAddon(addon.id, addon.isEnabled)}
-                            disabled={isUpdating}
+                            disabled={isUpdating || !canManageAddons}
                           >
                             <span className="toggle-track">
                               <span className="toggle-thumb">
@@ -364,8 +373,9 @@ function SettingsPage() {
                   <h3 className="settings-section-title">הגדרות תמחור</h3>
                   
                   <div className="form-group">
-                    <label className="form-label">מחיר ברירת מחדל לשעה (₪)</label>
+                    <label className="form-label" htmlFor={`${uid}-default_hourly_rate`}>מחיר ברירת מחדל לשעה (₪)</label>
                     <input
+                      id={`${uid}-default_hourly_rate`}
                       type="number"
                       name="default_hourly_rate"
                       className="form-input"
@@ -426,14 +436,16 @@ function SettingsPage() {
                   {settingsModalAddon.id === 'ai_assistant' && (
                     <>
                       <div className="form-group">
-                        <label className="form-label">OpenAI API Key</label>
+                        <label className="form-label" htmlFor={`${uid}-openai-api-key`}>OpenAI API Key</label>
                         <div className="api-key-input-wrapper">
                           <input
+                            id={`${uid}-openai-api-key`}
                             type={showApiKey ? 'text' : 'password'}
                             className="form-input"
                             value={addonSettings.openai_api_key || ''}
                             onChange={(e) => handleAddonSettingChange('openai_api_key', e.target.value)}
                             placeholder="sk-..."
+                            disabled={!canManageAddons}
                             dir="ltr"
                           />
                           <button
@@ -464,14 +476,16 @@ function SettingsPage() {
               <button className="btn btn-ghost" onClick={closeAddonSettings}>
                 ביטול
               </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={saveAddonSettings}
-                disabled={savingAddonSettings}
-              >
-                <Save size={16} />
-                {savingAddonSettings ? 'שומר...' : 'שמור'}
-              </button>
+              {canManageAddons && (
+                <button 
+                  className="btn btn-primary" 
+                  onClick={saveAddonSettings}
+                  disabled={savingAddonSettings}
+                >
+                  <Save size={16} />
+                  {savingAddonSettings ? 'שומר...' : 'שמור'}
+                </button>
+              )}
             </div>
           </div>
         </div>

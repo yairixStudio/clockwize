@@ -6,8 +6,9 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse
 } from '@simplewebauthn/server';
-import { generateToken, authMiddleware } from '../middleware/auth.js';
-import { saveLocalSession } from '../utils/localSession.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { createRateLimiter, ipAnd } from '../middleware/rateLimit.js';
+import { buildAuthResponse, buildPasswordResetRequiredResponse } from '../utils/authSession.js';
 
 const router = Router();
 
@@ -95,35 +96,10 @@ const insertPasskey = (db, { userId, registrationInfo, name }) => {
   return db.prepare('SELECT * FROM passkeys WHERE id = ?').get(id);
 };
 
-const getUserWorkspaces = (db, userId) => db.prepare(`
-  SELECT w.*, wm.role,
-    (SELECT COUNT(*) FROM workspace_members WHERE workspace_id = w.id) as member_count
-  FROM workspaces w
-  JOIN workspace_members wm ON w.id = wm.workspace_id
-  WHERE wm.user_id = ?
-  ORDER BY wm.joined_at ASC
-`).all(userId);
-
-const buildAuthResponse = (db, user) => {
-  const token = generateToken(user.id);
-  const workspaces = getUserWorkspaces(db, user.id);
-  const currentWorkspace = workspaces[0] || null;
-  if (currentWorkspace) {
-    saveLocalSession(token, currentWorkspace.id);
-  }
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      default_hourly_rate: user.default_hourly_rate,
-      is_admin: user.is_admin
-    },
-    token,
-    workspaces,
-    currentWorkspace
-  };
-};
+// Passkey sign-in: challenges per IP (every attempt counts - each one stores a flow), and failed
+// verifications per IP + credential
+const loginOptionsLimiter = createRateLimiter({ max: 30, key: (req) => req.ip });
+const loginVerifyLimiter = createRateLimiter({ max: 10, failuresOnly: true, key: ipAnd((req) => req.body?.response?.id) });
 
 // ===== Passwordless signup (public) =====
 
@@ -216,7 +192,7 @@ router.post('/signup/verify', async (req, res) => {
 
 // ===== Passwordless login (public, usernameless via discoverable credential) =====
 
-router.post('/login/options', async (req, res) => {
+router.post('/login/options', loginOptionsLimiter, async (req, res) => {
   try {
     const options = await generateAuthenticationOptions({
       rpID: RP_ID,
@@ -230,7 +206,7 @@ router.post('/login/options', async (req, res) => {
   }
 });
 
-router.post('/login/verify', async (req, res) => {
+router.post('/login/verify', loginVerifyLimiter, async (req, res) => {
   try {
     const db = getDb(req);
     const { flowId, response } = req.body;
@@ -274,6 +250,12 @@ router.post('/login/verify', async (req, res) => {
 
     db.prepare('UPDATE passkeys SET counter = ?, last_used_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(verification.authenticationInfo.newCounter, passkey.id);
+
+    // Flagged by the admin: a passkey doesn't skip the forced reset - no session until the new
+    // password is set (POST /api/auth/reset-password with this resetToken)
+    if (user.force_password_reset === 1) {
+      return res.json(buildPasswordResetRequiredResponse(user));
+    }
 
     res.json(buildAuthResponse(db, user));
   } catch (error) {

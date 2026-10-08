@@ -285,12 +285,12 @@ describe('payments: update, status and delete', () => {
     expect(paidAmount(user, project.id)).toBe(0);
   });
 
-  // Bug: PUT /:id/status uses COALESCE(?, paid_date), so un-paying a payment keeps its old
-  // paid_date, while the full PUT /:id clears it.
-  it.fails('quick status change away from paid clears paid_date', async () => {
+  it('quick status change away from paid clears paid_date', async () => {
     const user = await createUser();
     const p = (await pay(user, { amount: 90 })).body;
+    expect(p.paid_date).toBeTruthy();
     const res = await user.put(`/api/payments/${p.id}/status`).send({ status: 'pending' });
+    expect(res.body.status).toBe('pending');
     expect(res.body.paid_date).toBeNull();
   });
 

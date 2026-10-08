@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Users, Link2, Copy, Check, Trash2, 
@@ -19,12 +19,15 @@ function WorkspaceSettings() {
     leaveWorkspace,
     loadWorkspaces,
     canManageWorkspace,
+    canDeleteWorkspace,
+    canChangeMemberRole,
     canInviteMembers,
     canRemoveMember
   } = useStore();
   
   const navigate = useNavigate();
   const modal = useModal();
+  const uid = useId();
   
   const [activeTab, setActiveTab] = useState('members');
   const [members, setMembers] = useState([]);
@@ -259,7 +262,7 @@ function WorkspaceSettings() {
                           <span>{getRoleLabel(member.role)}</span>
                         </div>
                         <div className="member-actions">
-                          {canManageWorkspace() && member.role !== 'owner' && (
+                          {canChangeMemberRole(member.role) && (
                             <select
                               value={member.role}
                               onChange={(e) => handleUpdateMemberRole(member.user_id, e.target.value)}
@@ -342,9 +345,10 @@ function WorkspaceSettings() {
               {activeTab === 'general' && canManageWorkspace() && (
                 <div className="general-section">
                   <div className="setting-group">
-                    <label>שם ה-Workspace</label>
+                    <label htmlFor={`${uid}-workspace-name`}>שם ה-Workspace</label>
                     <div className="setting-input-row">
                       <input
+                        id={`${uid}-workspace-name`}
                         type="text"
                         value={workspaceName}
                         onChange={(e) => setWorkspaceName(e.target.value)}
@@ -360,6 +364,7 @@ function WorkspaceSettings() {
                     </div>
                   </div>
 
+                  {canDeleteWorkspace() && (
                   <div className="danger-zone">
                     <h3>
                       <AlertTriangle size={18} />
@@ -376,6 +381,7 @@ function WorkspaceSettings() {
                       </button>
                     </div>
                   </div>
+                  )}
                 </div>
               )}
 

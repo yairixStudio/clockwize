@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { DollarSign, Calendar, FileText, CreditCard, Clock, Tag, Link2, Plus, X } from 'lucide-react';
 import { projectsAPI, tasksAPI } from '../services/api';
@@ -25,6 +25,7 @@ const PAYMENT_METHODS = [
 
 function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) {
     useBodyScrollLock(true);
+    const uid = useId();
 
     const [formData, setFormData] = useState({
         amount: '',
@@ -167,11 +168,12 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
                     <div className="modal-body">
                         {showProjectSelect && (
                             <div className="form-group">
-                                <label className="form-label">
+                                <label className="form-label" htmlFor={`${uid}-project_id`}>
                                     <Tag size={16} style={{ marginLeft: '0.25rem' }} />
                                     פרויקט
                                 </label>
                                 <select
+                                    id={`${uid}-project_id`}
                                     name="project_id"
                                     className="form-input"
                                     value={formData.project_id}
@@ -189,8 +191,9 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
 
                         {formData.project_id && projectTasks.length > 0 && (
                             <div className="form-group">
-                                <label className="form-label">משימה (אופציונלי)</label>
+                                <label className="form-label" htmlFor={`${uid}-task_id`}>משימה (אופציונלי)</label>
                                 <select
+                                    id={`${uid}-task_id`}
                                     name="task_id"
                                     className="form-input"
                                     value={formData.task_id}
@@ -208,12 +211,13 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
 
                         <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="form-group">
-                                <label className="form-label">
+                                <label className="form-label" htmlFor={`${uid}-amount`}>
                                     <DollarSign size={16} style={{ marginLeft: '0.25rem' }} />
                                     סכום
                                 </label>
                                 <input
                                     type="number"
+                                    id={`${uid}-amount`}
                                     name="amount"
                                     className="form-input"
                                     value={formData.amount}
@@ -227,11 +231,12 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">
+                                <label className="form-label" htmlFor={`${uid}-status`}>
                                     <Clock size={16} style={{ marginLeft: '0.25rem' }} />
                                     סטטוס
                                 </label>
                                 <select
+                                    id={`${uid}-status`}
                                     name="status"
                                     className="form-input"
                                     value={formData.status}
@@ -246,12 +251,13 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
 
                         <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div className="form-group">
-                                <label className="form-label">
+                                <label className="form-label" htmlFor={`${uid}-date`}>
                                     <Calendar size={16} style={{ marginLeft: '0.25rem' }} />
                                     תאריך תשלום
                                 </label>
                                 <input
                                     type="date"
+                                    id={`${uid}-date`}
                                     name="date"
                                     className="form-input"
                                     value={formData.date}
@@ -262,12 +268,13 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">
+                                <label className="form-label" htmlFor={`${uid}-due_date`}>
                                     <Calendar size={16} style={{ marginLeft: '0.25rem' }} />
                                     תאריך יעד
                                 </label>
                                 <input
                                     type="date"
+                                    id={`${uid}-due_date`}
                                     name="due_date"
                                     className="form-input"
                                     value={formData.due_date}
@@ -278,11 +285,12 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">
+                            <label className="form-label" htmlFor={`${uid}-payment_method`}>
                                 <CreditCard size={16} style={{ marginLeft: '0.25rem' }} />
                                 אמצעי תשלום
                             </label>
                             <select
+                                id={`${uid}-payment_method`}
                                 name="payment_method"
                                 className="form-input"
                                 value={formData.payment_method}
@@ -295,11 +303,12 @@ function PaymentModal({ payment, projectId, projects, tasks, onSave, onClose }) 
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">
+                            <label className="form-label" htmlFor={`${uid}-notes`}>
                                 <FileText size={16} style={{ marginLeft: '0.25rem' }} />
                                 הערות
                             </label>
                             <textarea
+                                id={`${uid}-notes`}
                                 name="notes"
                                 className="form-input"
                                 value={formData.notes}

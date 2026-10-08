@@ -19,6 +19,9 @@ const useStore = create((set, get) => ({
   
   // Stats state
   dashboardStats: null,
+  // Params of the last dashboard stats load (the selected month or custom range, built by the
+  // Dashboard) - a workspace switch reloads the stats with them
+  dashboardStatsParams: {},
   
   // Integrations state
   integrations: [],
@@ -83,8 +86,13 @@ const useStore = create((set, get) => ({
     }
   },
   
-  // Apply a successful auth response (login / register / passkey flows)
+  // Apply a successful auth response (login / register / passkey / forced-reset flows).
+  // A response that still requires a password reset is not a session yet: nothing is stored and
+  // the user stays logged out, so the routes keep them on /login until the reset succeeded
+  // (Login.jsx then calls this again with the reset response).
   completeAuth: async (response) => {
+    if (response?.requiresPasswordReset) return response;
+
     const { user, token, workspaces, currentWorkspace } = response;
     localStorage.setItem('token', token);
 
@@ -102,10 +110,11 @@ const useStore = create((set, get) => ({
     // Load addons before returning (needed for addon-protected routes and nav links)
     await get().loadEnabledAddons();
     get().loadActiveTimers();
-    return response; // Return full response including requiresPasswordReset if present
+    return response;
   },
 
-  // Login
+  // Login. When the server flags the account for a forced password reset, the response comes back
+  // with requiresPasswordReset and the user is NOT logged in yet (see completeAuth).
   login: async (email, password) => {
     const response = await authAPI.login({ email, password });
     return get().completeAuth(response);
@@ -126,6 +135,7 @@ const useStore = create((set, get) => ({
       isAuthenticated: false,
       activeTimers: [],
       dashboardStats: null,
+      dashboardStatsParams: {},
       workspaces: [],
       currentWorkspace: null,
       workspaceRole: null,
@@ -155,9 +165,9 @@ const useStore = create((set, get) => ({
       reminders: [],
       unreadRemindersCount: 0
     });
-    // Reload workspace-specific data
+    // Reload workspace-specific data (the stats for the period the dashboard is showing)
     get().loadActiveTimers();
-    get().loadDashboardStats();
+    get().loadDashboardStats(get().dashboardStatsParams);
     get().loadIntegrations();
   },
 
@@ -233,11 +243,19 @@ const useStore = create((set, get) => ({
     }
   },
 
-  // Permission helpers
+  // Permission helpers - the same rules as server/middleware/auth.js and routes/workspaces.js
+  // Rename the workspace, list / revoke invites
   canManageWorkspace: () => {
     const role = get().workspaceRole;
-    return role === 'owner';
+    return role === 'owner' || role === 'admin';
   },
+
+  // Only the owner deletes the workspace
+  canDeleteWorkspace: () => get().workspaceRole === 'owner',
+
+  // Only the owner appoints or demotes admins; an admin may change only members, and only to
+  // member - so in practice only the owner changes roles. Nobody changes the owner's role.
+  canChangeMemberRole: (memberRole) => get().workspaceRole === 'owner' && memberRole !== 'owner',
 
   canInviteMembers: () => {
     const role = get().workspaceRole;
@@ -404,7 +422,10 @@ const useStore = create((set, get) => ({
   },
   
   // Stats
+  // The params (the period the Dashboard shows) are remembered, so reloads elsewhere - e.g. after a
+  // workspace switch - can ask for the same period
   loadDashboardStats: async (params = {}) => {
+    set({ dashboardStatsParams: params });
     try {
       const stats = await statsAPI.getDashboard(params);
       set({ dashboardStats: stats });

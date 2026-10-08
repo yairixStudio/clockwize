@@ -3,6 +3,7 @@ import request from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import { getApp, createUser, createClientProjectTask } from './helpers.js';
 import { twoWorkspaces, addMember, insertTimeEntry } from './helpers-money.js';
+import { adminClient } from './helpers-core.js';
 
 let app;
 beforeAll(async () => { ({ app } = await getApp()); });
@@ -505,8 +506,30 @@ describe('leads: cross-workspace isolation', () => {
     const dump = JSON.stringify((await bob.get(`/api/leads/${lead.id}`)).body);
     expect(dump).not.toContain('Alice');
 
-    // A global source (no workspace) is fine
-    const global = (await bob.post('/api/client-sources').send({ name: `Global ${uuidv4()}`, is_global: true })).body;
-    expect((await bob.post('/api/leads').send({ name: 'ok', source_id: global.id })).status).toBe(201);
+    // A global source (no workspace, created by a system admin) is fine
+    const created = await (await adminClient()).post('/api/client-sources').send({ name: `Global ${uuidv4()}`, is_global: true });
+    expect(created.status).toBe(201);
+    const global = created.body;
+    expect(global.workspace_id).toBeNull();
+    const ok = await bob.post('/api/leads').send({ name: 'ok', source_id: global.id });
+    expect(ok.status).toBe(201);
+    expect(ok.body.source_id).toBe(global.id);
+    expect((await bob.get(`/api/leads/${ok.body.id}`)).body.source_id).toBe(global.id);
+  });
+});
+
+describe('lead reminders keep their day of the month', () => {
+  it('stores the recurrence day when a monthly lead reminder is created', async () => {
+    const user = await createUser();
+    const lead = await user.post('/api/leads').send({ name: 'Recurring lead' });
+    expect(lead.status).toBe(201);
+    const res = await user.post(`/api/leads/${lead.body.id}/reminders`).send({
+      content: 'follow up',
+      due_date: new Date(2027, 0, 31, 10, 0).toISOString(),
+      is_recurring: true,
+      recurrence_interval: 'monthly'
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.recurrence_day).toBe(31);
   });
 });

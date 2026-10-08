@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Users, Folder, Play, Pause, Square, X, ChevronRight, ChevronDown, Clock, Plus, MessageSquare, Search, CheckCircle2, ExternalLink, Circle, CircleCheck, Star, GripVertical, MoreVertical } from 'lucide-react';
@@ -14,6 +14,7 @@ import TaskModal from '../components/TaskModal';
 import TimeEntryModal from '../components/TimeEntryModal';
 import Forum from '../components/Forum';
 import PaymentStatusBadge, { calculateProjectEarnings } from '../components/PaymentStatusBadge';
+import { buildDashboardStatsParams } from '../components/StatsBar';
 import './Dashboard.css';
 
 const DEFAULT_CLIENT_ORDER = { favorites: [], nonFavorites: [] };
@@ -58,6 +59,7 @@ function Dashboard() {
   const selectedMonth = outletContext?.selectedMonth;
   const dateRange = outletContext?.dateRange;
   const modal = useModal();
+  const uid = useId();
   const [clients, setClients] = useState([]);
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -148,23 +150,8 @@ function Dashboard() {
   // Reload stats when selectedMonth or dateRange changes
   useEffect(() => {
     const reloadStats = async () => {
-      let statsParams = {};
-      
-      if (dateRange) {
-        // Custom date range mode
-        statsParams = {
-          startDate: dateRange.start.toISOString(),
-          endDate: dateRange.end.toISOString()
-        };
-      } else if (selectedMonth) {
-        // Monthly mode
-        statsParams = {
-          month: selectedMonth.getMonth(),
-          year: selectedMonth.getFullYear()
-        };
-      }
-      
-      await loadDashboardStats(statsParams);
+      // Custom range or selected month, as the user's local calendar days
+      await loadDashboardStats(buildDashboardStatsParams({ dateRange, selectedMonth }));
     };
     reloadStats();
   }, [selectedMonth, dateRange, loadDashboardStats]);
@@ -1612,8 +1599,9 @@ function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                 <textarea
+                  id={`${uid}-stop-notes`}
                   className="form-input"
                   value={stopNotes}
                   onChange={e => setStopNotes(e.target.value)}

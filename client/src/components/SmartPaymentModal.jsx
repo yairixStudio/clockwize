@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronDown, ChevronUp, Edit2, Check, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
@@ -25,6 +25,7 @@ const PAYMENT_METHODS = [
  */
 function SmartPaymentModal({ client, projects, onSave, onClose }) {
   useBodyScrollLock(true);
+  const uid = useId();
 
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
@@ -146,10 +147,11 @@ function SmartPaymentModal({ client, projects, onSave, onClose }) {
           <div className="modal-body">
             {/* Amount Input */}
             <div className="form-group">
-              <label className="form-label">סכום שהתקבל</label>
+              <label className="form-label" htmlFor={`${uid}-amount`}>סכום שהתקבל</label>
               <div className="amount-input-wrapper">
                 <span className="currency-symbol">₪</span>
                 <input
+                  id={`${uid}-amount`}
                   type="number"
                   className="form-input amount-input"
                   value={amount}
@@ -181,8 +183,9 @@ function SmartPaymentModal({ client, projects, onSave, onClose }) {
             {/* Date & Payment Method */}
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">תאריך</label>
+                <label className="form-label" htmlFor={`${uid}-date`}>תאריך</label>
                 <input
+                  id={`${uid}-date`}
                   type="date"
                   className="form-input"
                   value={date}
@@ -192,8 +195,9 @@ function SmartPaymentModal({ client, projects, onSave, onClose }) {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">אמצעי תשלום</label>
+                <label className="form-label" htmlFor={`${uid}-payment-method`}>אמצעי תשלום</label>
                 <select
+                  id={`${uid}-payment-method`}
                   className="form-input"
                   value={paymentMethod}
                   onChange={e => setPaymentMethod(e.target.value)}
@@ -319,8 +323,9 @@ function SmartPaymentModal({ client, projects, onSave, onClose }) {
 
             {/* Notes */}
             <div className="form-group">
-              <label className="form-label">הערות</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>הערות</label>
               <textarea
+                id={`${uid}-notes`}
                 className="form-input"
                 value={notes}
                 onChange={e => setNotes(e.target.value)}

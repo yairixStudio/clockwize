@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Play, Pause, Square, X, Mail, Phone, Building2, Bell, Folder, Clock, DollarSign, RotateCw, Star, MessageSquare, Globe, CreditCard, Share2, Link as LinkIcon, Lock, TrendingUp, Key, FileText, StickyNote, CheckSquare, Circle, CircleCheck, Copy } from 'lucide-react';
@@ -38,6 +38,7 @@ function ClientDetail() {
   const navigate = useNavigate();
   const { setStats: setGlobalStats } = useOutletContext();
   const modal = useModal();
+  const uid = useId();
   const { activeTimers, startTimer, pauseTimer, resumeTimer, stopTimer, discardTimer, getTimerForProject, integrations, isAddonEnabled } = useStore();
 
   const [client, setClient] = useState(null);
@@ -1585,8 +1586,9 @@ function ClientDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                 <textarea
+                  id={`${uid}-stop-notes`}
                   className="form-input"
                   value={stopNotes}
                   onChange={e => setStopNotes(e.target.value)}
@@ -1623,9 +1625,10 @@ function ClientDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">שייך לפרויקט *</label>
+                <label className="form-label" htmlFor={`${uid}-client-timer-project`}>שייך לפרויקט *</label>
                 {projects.length > 0 ? (
                   <select
+                    id={`${uid}-client-timer-project`}
                     className="form-input"
                     value={selectedProjectForTimer}
                     onChange={e => setSelectedProjectForTimer(e.target.value)}
@@ -1643,8 +1646,9 @@ function ClientDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-client-timer-notes`}>הערות (אופציונלי)</label>
                 <textarea
+                  id={`${uid}-client-timer-notes`}
                   className="form-input"
                   value={clientTimerNotes}
                   onChange={e => setClientTimerNotes(e.target.value)}

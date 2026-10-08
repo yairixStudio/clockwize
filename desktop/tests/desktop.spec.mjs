@@ -37,7 +37,9 @@ test.beforeEach(async () => {
       CLOCKWIZE_PORT_FILE: path.join(tmp, '.server-port'),
       CLOCKWIZE_SESSION_FILE: path.join(tmp, '.local-session'),
       CLOCKWIZE_WIDGET_PORT: String(WIDGET_PORT),
-      CLOCKWIZE_WIDGET_SECRET: WIDGET_SECRET
+      CLOCKWIZE_WIDGET_SECRET: WIDGET_SECRET,
+      // Don't flash windows on the developer's screen while the suite runs
+      CLOCKWIZE_E2E_INVISIBLE: '1'
     }
   });
 });

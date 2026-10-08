@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
+import { recurrenceDayFor } from '../utils/recurrence.js';
 import { decrypt } from '../utils/crypto.js';
 
 const router = Router();
@@ -996,10 +997,11 @@ router.post('/:id/reminders', async (req, res) => {
 
     const id = uuidv4();
     db.prepare(`
-      INSERT INTO reminders (id, user_id, workspace_id, content, notes, due_date, association_type, association_id, is_recurring, recurrence_interval)
-      VALUES (?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?)
+      INSERT INTO reminders (id, user_id, workspace_id, content, notes, due_date, association_type, association_id, is_recurring, recurrence_interval, recurrence_day)
+      VALUES (?, ?, ?, ?, ?, ?, 'lead', ?, ?, ?, ?)
     `).run(id, req.userId, req.workspaceId, content, notes || null, due_date, req.params.id,
-      is_recurring ? 1 : 0, recurrence_interval || null);
+      is_recurring ? 1 : 0, recurrence_interval || null,
+      recurrenceDayFor({ is_recurring, recurrence_interval, due_date }));
 
     const reminder = db.prepare(`SELECT r.*, r.is_read as is_completed FROM reminders r WHERE r.id = ?`).get(id);
     res.status(201).json(reminder);

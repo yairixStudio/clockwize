@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { Check, User, Briefcase, ListTodo, CheckSquare, Bell, Edit2, X, Save, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Type icons and labels
@@ -89,6 +89,7 @@ function PlanCard({ item, index, isSelected, onToggle, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [isExpanded, setIsExpanded] = useState(false);
+  const uid = useId();
 
   const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.task;
   const Icon = config.icon;
@@ -169,15 +170,17 @@ function PlanCard({ item, index, isSelected, onToggle, onUpdate }) {
         <div className="plan-card-edit-form">
           {config.fields.map(field => (
             <div key={field} className="plan-card-field">
-              <label>{FIELD_LABELS[field] || field}</label>
+              <label htmlFor={`${uid}-${field}`}>{FIELD_LABELS[field] || field}</label>
               {field === 'description' || field === 'notes' || field === 'content' ? (
                 <textarea
+                  id={`${uid}-${field}`}
                   value={editData[field] || ''}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                   rows={2}
                 />
               ) : field === 'pricing_type' ? (
                 <select
+                  id={`${uid}-${field}`}
                   value={editData[field] || 'hourly'}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                 >
@@ -186,6 +189,7 @@ function PlanCard({ item, index, isSelected, onToggle, onUpdate }) {
                 </select>
               ) : field === 'priority' ? (
                 <select
+                  id={`${uid}-${field}`}
                   value={editData[field] || 'normal'}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                 >
@@ -195,12 +199,14 @@ function PlanCard({ item, index, isSelected, onToggle, onUpdate }) {
                 </select>
               ) : field === 'due_date' ? (
                 <input
+                  id={`${uid}-${field}`}
                   type="datetime-local"
                   value={editData[field]?.slice(0, 16) || ''}
                   onChange={(e) => handleFieldChange(field, e.target.value)}
                 />
               ) : (
                 <input
+                  id={`${uid}-${field}`}
                   type={field.includes('rate') || field.includes('price') || field.includes('hours') ? 'number' : 'text'}
                   value={editData[field] || ''}
                   onChange={(e) => handleFieldChange(field, e.target.value)}

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Package, X } from 'lucide-react';
 import './CatalogModal.css';
 
 function CatalogModal({ item, categories = [], onSave, onClose }) {
+  const uid = useId();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -23,7 +24,7 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
       setFormData({
         name: item.name || '',
         description: item.description || '',
-        price: item.price || '',
+        price: item.price ?? '',
         pricing_type: item.pricing_type || 'fixed',
         unit: item.unit || '',
         category: item.category || '',
@@ -52,7 +53,8 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
     try {
       const data = {
         ...formData,
-        price: formData.price ? parseFloat(formData.price) : null,
+        // 0 is a real price (a free item); only an empty field means "no price"
+        price: formData.price !== '' && formData.price != null ? parseFloat(formData.price) : null,
         category: useNewCategory ? newCategory : formData.category
       };
       await onSave(data);
@@ -79,8 +81,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">שם הפריט *</label>
+              <label className="form-label" htmlFor={`${uid}-name`}>שם הפריט *</label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 className="form-input"
                 value={formData.name}
@@ -92,8 +95,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">תיאור</label>
+              <label className="form-label" htmlFor={`${uid}-description`}>תיאור</label>
               <textarea
+                id={`${uid}-description`}
                 className="form-input"
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -104,8 +108,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
 
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">מחיר (₪)</label>
+                <label className="form-label" htmlFor={`${uid}-price`}>מחיר (₪)</label>
                 <input
+                  id={`${uid}-price`}
                   type="number"
                   className="form-input"
                   value={formData.price}
@@ -118,8 +123,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">סוג תמחור</label>
+                <label className="form-label" htmlFor={`${uid}-pricing-type`}>סוג תמחור</label>
                 <select
+                  id={`${uid}-pricing-type`}
                   className="form-input"
                   value={formData.pricing_type}
                   onChange={e => setFormData({ ...formData, pricing_type: e.target.value })}
@@ -133,8 +139,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">יחידת מידה (אופציונלי)</label>
+              <label className="form-label" htmlFor={`${uid}-unit`}>יחידת מידה (אופציונלי)</label>
               <input
+                id={`${uid}-unit`}
                 type="text"
                 className="form-input"
                 value={formData.unit}
@@ -145,10 +152,11 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">קטגוריה</label>
+              <label className="form-label" htmlFor={`${uid}-category`}>קטגוריה</label>
               {!useNewCategory ? (
                 <div className="category-select-wrapper">
                   <select
+                    id={`${uid}-category`}
                     className="form-input"
                     value={formData.category}
                     onChange={e => setFormData({ ...formData, category: e.target.value })}
@@ -169,6 +177,7 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
               ) : (
                 <div className="category-select-wrapper">
                   <input
+                    id={`${uid}-category`}
                     type="text"
                     className="form-input"
                     value={newCategory}
@@ -188,8 +197,9 @@ function CatalogModal({ item, categories = [], onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">הערות פנימיות</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>הערות פנימיות</label>
               <textarea
+                id={`${uid}-notes`}
                 className="form-input notes-input"
                 value={formData.notes}
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}

@@ -247,6 +247,11 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(404).json({ error: 'Expense not found' });
     }
 
+    // Same rule as POST, but only when the amount is being changed
+    if (amount !== undefined && (!amount || amount <= 0)) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
     // Only values that change are checked, so a stale stored reference does not block edits
     const foreignError = findForeignReference(db, req.workspaceId, {
       project_id: project_id !== existing.project_id ? project_id : null,

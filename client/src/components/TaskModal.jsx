@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -6,6 +6,7 @@ import { projectsAPI, clientsAPI } from '../services/api';
 
 function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClose }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const formRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -129,8 +130,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">שם המשימה *</label>
+              <label className="form-label" htmlFor={`${uid}-name`}>שם המשימה *</label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 name="name"
                 className="form-input"
@@ -142,8 +144,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             
             {task && allProjects.length > 0 && (
               <div className="form-group">
-                <label className="form-label">שיוך לפרויקט</label>
+                <label className="form-label" htmlFor={`${uid}-project_id`}>שיוך לפרויקט</label>
                 <select
+                  id={`${uid}-project_id`}
                   name="project_id"
                   className="form-input"
                   value={formData.project_id}
@@ -172,8 +175,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             )}
 
             <div className="form-group">
-              <label className="form-label">תיאור</label>
+              <label className="form-label" htmlFor={`${uid}-description`}>תיאור</label>
               <textarea
+                id={`${uid}-description`}
                 name="description"
                 className="form-input"
                 defaultValue={formData.description}
@@ -183,8 +187,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
 
             <div className="form-group">
-              <label className="form-label">סוג תמחור</label>
+              <label className="form-label" htmlFor={`${uid}-pricing_type`}>סוג תמחור</label>
               <select
+                id={`${uid}-pricing_type`}
                 name="pricing_type"
                 className="form-input"
                 value={formData.pricing_type}
@@ -198,8 +203,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             
             {pricingType === 'hourly' && (
               <div className="form-group">
-                <label className="form-label">מחיר לשעה (₪)</label>
+                <label className="form-label" htmlFor={`${uid}-hourly_rate`}>מחיר לשעה (₪)</label>
                 <input
+                  id={`${uid}-hourly_rate`}
                   type="number"
                   name="hourly_rate"
                   className="form-input"
@@ -214,8 +220,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             )}
             
             <div className="form-group">
-              <label className="form-label">סטטוס</label>
+              <label className="form-label" htmlFor={`${uid}-status`}>סטטוס</label>
               <select
+                id={`${uid}-status`}
                 name="status"
                 className="form-input"
                 defaultValue={formData.status}
@@ -231,8 +238,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
             
             <div className="form-group">
-              <label className="form-label">🎯 חשיבות</label>
+              <label className="form-label" htmlFor={`${uid}-priority`}>🎯 חשיבות</label>
               <select
+                id={`${uid}-priority`}
                 name="priority"
                 className="form-input"
                 defaultValue={formData.priority}
@@ -245,8 +253,8 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
             
             <div className="form-group">
-              <label className="form-label">📱 פלטפורמת התקשרות</label>
-              <div className="platform-chips">
+              <label className="form-label" id={`${uid}-communication-platforms-label`}>📱 פלטפורמת התקשרות</label>
+              <div className="platform-chips" role="group" aria-labelledby={`${uid}-communication-platforms-label`}>
                 {[
                   { value: 'whatsapp', label: 'ווצאפ' },
                   { value: 'email', label: 'מייל' },
@@ -267,8 +275,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
 
             <div className="form-group">
-              <label className="form-label">⏱️ שעות משוערות</label>
+              <label className="form-label" htmlFor={`${uid}-estimated_hours`}>⏱️ שעות משוערות</label>
               <input
+                id={`${uid}-estimated_hours`}
                 type="number"
                 name="estimated_hours"
                 className="form-input"
@@ -283,8 +292,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
             
             <div className="form-group">
-              <label className="form-label">💵 סכום ששולם (₪)</label>
+              <label className="form-label" htmlFor={`${uid}-paid_amount`}>💵 סכום ששולם (₪)</label>
               <input
+                id={`${uid}-paid_amount`}
                 type="number"
                 name="paid_amount"
                 className="form-input"
@@ -298,8 +308,9 @@ function TaskModal({ task, projectHourlyRate, projectPricingType, onSave, onClos
             </div>
             
             <div className="form-group">
-              <label className="form-label">📝 פתק פרטי (לעצמך)</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>📝 פתק פרטי (לעצמך)</label>
               <textarea
+                id={`${uid}-notes`}
                 name="notes"
                 className="form-input notes-input"
                 defaultValue={formData.notes}
