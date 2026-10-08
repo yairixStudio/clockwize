@@ -1,0 +1,6 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- minute hand at 12, hour hand at 3 -->
+  <line x1="512" y1="512" x2="512" y2="322" stroke="#f5f7ff" stroke-width="56" stroke-linecap="round"/>
+  <line x1="512" y1="512" x2="664" y2="512" stroke="#dfe3ff" stroke-width="52" stroke-linecap="round"/>
+  <circle cx="512" cy="512" r="40" fill="#f5f7ff"/>
+</svg>
