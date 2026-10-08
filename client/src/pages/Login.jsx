@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { KeyRound } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -6,15 +6,14 @@ import useStore from '../store/useStore';
 import { useModal } from '../components/Modal';
 import { authAPI, passkeysAPI } from '../services/api';
 
+const RESET_REQUIRED_ERROR = 'חובה לשנות סיסמה כדי להמשיך';
+
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
-  const [userId, setUserId] = useState(null);
-  const [currentPassword, setCurrentPassword] = useState('');
   const { login, completeAuth } = useStore();
   const navigate = useNavigate();
   const modal = useModal();
@@ -43,6 +42,11 @@ function Login() {
       const { flowId, options } = await passkeysAPI.loginOptions();
       const authResponse = await startAuthentication({ optionsJSON: options });
       const response = await passkeysAPI.loginVerify({ flowId, response: authResponse });
+      if (response?.requiresPasswordReset) {
+        setPasskeyLoading(false);
+        await runForcedPasswordReset(response);
+        return;
+      }
       await completeAuth(response);
       navigateAfterAuth();
     } catch (err) {
@@ -65,91 +69,74 @@ function Login() {
     handlePasskeyLogin();
   };
 
+  // The admin flagged this account for a forced password reset. Instead of a session the server
+  // sent a short-lived resetToken (useStore.completeAuth leaves the user logged out), so the user
+  // only gets in after setting a new password here - the reset response is the session.
+  const runForcedPasswordReset = async ({ resetToken }) => {
+    for (;;) {
+      const newPassword = await modal.prompt(
+        'הזן סיסמה חדשה (לפחות 4 תווים):',
+        {
+          title: 'נדרש איפוס סיסמה',
+          placeholder: 'סיסמה חדשה',
+          inputType: 'password',
+          autoComplete: 'new-password'
+        }
+      );
+
+      if (!newPassword) {
+        // Cancelled: stay logged out on the login page
+        setError(RESET_REQUIRED_ERROR);
+        return;
+      }
+
+      if (newPassword.length < 4) {
+        await modal.error('סיסמה חייבת להכיל לפחות 4 תווים');
+        continue;
+      }
+
+      let session;
+      try {
+        session = await authAPI.resetPassword({ resetToken, newPassword });
+      } catch (err) {
+        // Expired reset token (401) or too many attempts (429): asking again won't help - sign in again
+        if (err.status === 401 || err.status === 429) {
+          setError(err.message);
+          return;
+        }
+        await modal.error(err.message || 'שגיאה בשינוי סיסמה');
+        continue;
+      }
+
+      await modal.success('סיסמה שונתה בהצלחה!');
+      await completeAuth(session);
+      navigateAfterAuth();
+      return;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    
+
+    let response;
     try {
-      const response = await login(email, password);
-      console.log('Login response:', response);
-      
-      // Check if password reset is required
-      if (response && response.requiresPasswordReset) {
-        console.log('Password reset required! Opening modal...');
-        setUserId(response.user.id);
-        setCurrentPassword(password);
-        setShowPasswordResetModal(true);
-        setLoading(false);
-        return;
-      }
-      
-      navigateAfterAuth();
+      response = await login(email, password);
     } catch (err) {
-      console.error('Login error:', err);
       setError(err.message);
-    } finally {
       setLoading(false);
+      return;
     }
+    setLoading(false);
+
+    if (response?.requiresPasswordReset) {
+      await runForcedPasswordReset(response);
+      return;
+    }
+
+    navigateAfterAuth();
   };
-  
-  // Show password reset modal when needed
-  useEffect(() => {
-    if (!showPasswordResetModal) return;
-    
-    console.log('useEffect triggered - showing password reset modal');
-    
-    const doPasswordReset = async () => {
-      console.log('handlePasswordReset called');
-      const newPassword = await modal.prompt(
-        'הזן סיסמה חדשה (לפחות 4 תווים):',
-        { 
-          title: 'נדרש איפוס סיסמה',
-          placeholder: 'סיסמה חדשה',
-          type: 'password'
-        }
-      );
-      
-      console.log('User entered password:', newPassword ? '[HIDDEN]' : 'null/cancelled');
-      
-      if (!newPassword) {
-        // User cancelled - log them out
-        console.log('User cancelled password reset');
-        setShowPasswordResetModal(false);
-        setError('חובה לשנות סיסמה כדי להמשיך');
-        return;
-      }
-      
-      if (newPassword.length < 4) {
-        console.log('Password too short, asking again');
-        await modal.error('סיסמה חייבת להכיל לפחות 4 תווים');
-        // Try again
-        setTimeout(() => doPasswordReset(), 100);
-        return;
-      }
-      
-      try {
-        console.log('Calling resetPassword API...');
-        await authAPI.resetPassword({
-          userId,
-          oldPassword: currentPassword,
-          newPassword
-        });
-        
-        console.log('Password reset successful');
-        setShowPasswordResetModal(false);
-        await modal.success('סיסמה שונתה בהצלחה!');
-        navigate('/');
-      } catch (err) {
-        console.error('Password reset error:', err);
-        await modal.error(err.message || 'שגיאה בשינוי סיסמה');
-        // Try again
-        setTimeout(() => doPasswordReset(), 100);
-      }
-    };
-    
-    doPasswordReset();
-  }, [showPasswordResetModal, userId, currentPassword, modal, navigate]);
   
   return (
     <div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { X, ArrowLeft, CheckCircle, Folder, Clock, ListTodo, Bell, Building2 } from 'lucide-react';
 import { leadsAPI } from '../services/api';
 import { useModal } from './Modal';
@@ -8,6 +8,7 @@ import { formatDurationHuman } from '../utils/format';
 function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
   const modal = useModal();
   const navigate = useNavigate();
+  const uid = useId();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [form, setForm] = useState({
@@ -175,8 +176,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
 
                   {/* Project name */}
                   <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-                    <label className="form-label">שם הפרויקט</label>
+                    <label className="form-label" htmlFor={`${uid}-project-name`}>שם הפרויקט</label>
                     <input
+                      id={`${uid}-project-name`}
                       type="text"
                       className="form-input"
                       value={acquisitionProjectName}
@@ -207,8 +209,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
 
                   <div className="form-grid">
                     <div className="form-group">
-                      <label className="form-label">שם הלקוח</label>
+                      <label className="form-label" htmlFor={`${uid}-override-name`}>שם הלקוח</label>
                       <input
+                        id={`${uid}-override-name`}
                         type="text"
                         className="form-input"
                         value={form.override_name}
@@ -217,8 +220,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">אימייל</label>
+                      <label className="form-label" htmlFor={`${uid}-override-email`}>אימייל</label>
                       <input
+                        id={`${uid}-override-email`}
                         type="email"
                         className="form-input"
                         value={form.override_email}
@@ -227,8 +231,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">טלפון</label>
+                      <label className="form-label" htmlFor={`${uid}-override-phone`}>טלפון</label>
                       <input
+                        id={`${uid}-override-phone`}
                         type="tel"
                         className="form-input"
                         value={form.override_phone}
@@ -237,8 +242,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">כתובת (מחברה)</label>
+                      <label className="form-label" htmlFor={`${uid}-override-company`}>כתובת (מחברה)</label>
                       <input
+                        id={`${uid}-override-company`}
                         type="text"
                         className="form-input"
                         value={form.override_company}
@@ -268,8 +274,9 @@ function LeadConvertModal({ isOpen, onClose, lead, onConverted }) {
                     {createAcquisitionProject && (
                       <div style={{ marginTop: '0.75rem', paddingRight: '1.75rem' }}>
                         <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem' }}>שם הפרויקט</label>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }} htmlFor={`${uid}-project-name`}>שם הפרויקט</label>
                           <input
+                            id={`${uid}-project-name`}
                             type="text"
                             className="form-input"
                             value={acquisitionProjectName}

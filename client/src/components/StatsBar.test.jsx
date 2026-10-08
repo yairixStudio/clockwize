@@ -211,9 +211,8 @@ describe('StatsBar - date range modal', () => {
     expect(screen.queryByRole('heading', { name: 'בחירת טווח תאריכים' })).not.toBeInTheDocument();
   });
 
-  // The start is parsed as UTC midnight (03:00 in Israel) and server/routes/stats.js snaps the range
-  // to UTC days, so the dashboard window is shifted by the UTC offset - needs a client+server decision
-  it.fails('starts the applied range at local midnight of the chosen day', async () => {
+  // Ranges are the user's local calendar days; the Dashboard sends them as exact instants
+  it('starts the applied range at local midnight of the chosen day', async () => {
     const { onDateRangeChange } = renderBar({ selectedMonth: new Date() });
     await userEvent.click(currentButton());
 
@@ -221,7 +220,11 @@ describe('StatsBar - date range modal', () => {
     fireEvent.change(endInput(), { target: { value: '2026-09-15' } });
     await userEvent.click(screen.getByRole('button', { name: 'החל טווח' }));
 
-    expect(onDateRangeChange.mock.calls[0][0].start).toEqual(new Date(2026, 8, 1, 0, 0, 0, 0));
+    const { start, end } = onDateRangeChange.mock.calls[0][0];
+    expect(start).toEqual(new Date(2026, 8, 1, 0, 0, 0, 0));
+    // Israel is UTC+3 in September: local midnight is 21:00 UTC of the previous day
+    expect(start.toISOString()).toBe('2026-08-31T21:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-09-15T20:59:59.999Z');
   });
 
   it('accepts a single-day range', async () => {

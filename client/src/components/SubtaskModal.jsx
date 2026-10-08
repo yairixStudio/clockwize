@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -6,6 +6,7 @@ import { tasksAPI, projectsAPI } from '../services/api';
 
 function SubtaskModal({ subtask, onSave, onClose }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const formRef = useRef(null);
   const [formData, setFormData] = useState({
     title: '',
@@ -107,8 +108,9 @@ function SubtaskModal({ subtask, onSave, onClose }) {
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">כותרת *</label>
+              <label className="form-label" htmlFor={`${uid}-title`}>כותרת *</label>
               <input
+                id={`${uid}-title`}
                 type="text"
                 name="title"
                 className="form-input"
@@ -120,8 +122,9 @@ function SubtaskModal({ subtask, onSave, onClose }) {
 
             {subtask && allTasks.length > 0 && (
               <div className="form-group">
-                <label className="form-label">שיוך למשימה</label>
+                <label className="form-label" htmlFor={`${uid}-task_id`}>שיוך למשימה</label>
                 <select
+                  id={`${uid}-task_id`}
                   name="task_id"
                   className="form-input"
                   value={formData.task_id}
@@ -150,8 +153,9 @@ function SubtaskModal({ subtask, onSave, onClose }) {
             )}
 
             <div className="form-group">
-              <label className="form-label">תאריך יעד</label>
+              <label className="form-label" htmlFor={`${uid}-due_date`}>תאריך יעד</label>
               <input
+                id={`${uid}-due_date`}
                 type="date"
                 name="due_date"
                 className="form-input"
@@ -162,8 +166,9 @@ function SubtaskModal({ subtask, onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">עדיפות</label>
+              <label className="form-label" htmlFor={`${uid}-priority`}>עדיפות</label>
               <select
+                id={`${uid}-priority`}
                 name="priority"
                 className="form-input"
                 defaultValue={formData.priority}
@@ -176,8 +181,8 @@ function SubtaskModal({ subtask, onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">📱 פלטפורמת התקשרות</label>
-              <div className="platform-chips">
+              <label className="form-label" id={`${uid}-communication-platforms-label`}>📱 פלטפורמת התקשרות</label>
+              <div className="platform-chips" role="group" aria-labelledby={`${uid}-communication-platforms-label`}>
                 {[
                   { value: 'whatsapp', label: 'ווצאפ' },
                   { value: 'email', label: 'מייל' },
@@ -198,8 +203,9 @@ function SubtaskModal({ subtask, onSave, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">תיאור</label>
+              <label className="form-label" htmlFor={`${uid}-description`}>תיאור</label>
               <textarea
+                id={`${uid}-description`}
                 name="description"
                 className="form-input"
                 defaultValue={formData.description}

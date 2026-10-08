@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { PASSWORD, registerUser, uniqueEmail, uniqueName } from './helpers.js';
+import {
+  PASSWORD,
+  acknowledge,
+  apiAs,
+  appDialog,
+  loginInBrowser,
+  loginUser,
+  registerUser,
+  uniqueEmail,
+  uniqueName
+} from './helpers.js';
 
 const loginForm = (page) => ({
   email: page.getByPlaceholder('admin או your@email.com'),
@@ -70,6 +80,59 @@ test.describe('auth', () => {
     await expect(page.getByText('אימייל או סיסמה שגויים')).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull();
+  });
+
+  test('a user flagged for a forced password reset must set a new password before entering', async ({ page, request }) => {
+    const user = await registerUser(request);
+    const admin = await loginUser(request, 'admin', 'admin');
+
+    // Flagging ends the session the user already has
+    await loginInBrowser(page, user);
+    await expect(page.getByRole('heading', { name: `שלום, ${user.name}!` })).toBeVisible();
+    await apiAs(request, admin).post(`/api/admin/users/${user.user.id}/force-password-reset`);
+    await page.reload();
+    await expect(page).toHaveURL(/\/login$/);
+    expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull();
+
+    const form = loginForm(page);
+    const dialog = appDialog(page);
+    const resetHeading = dialog.getByRole('heading', { name: 'נדרש איפוס סיסמה' });
+    const newPasswordInput = dialog.getByLabel('הזן סיסמה חדשה (לפחות 4 תווים):');
+    const signIn = async () => {
+      await form.email.fill(user.email);
+      await form.password.fill(PASSWORD);
+      await form.submit.click();
+      await expect(resetHeading).toBeVisible();
+    };
+
+    // Cancelling the reset leaves the user logged out, also after a reload
+    await page.goto('/login');
+    await signIn();
+    await expect(newPasswordInput).toHaveAttribute('type', 'password');
+    await expect(page).toHaveURL(/\/login$/);
+    expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull();
+    await dialog.getByRole('button', { name: 'ביטול', exact: true }).click();
+    await expect(page.getByText('חובה לשנות סיסמה כדי להמשיך')).toBeVisible();
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/login$/);
+
+    // Setting the new password signs the user in
+    const newPassword = `${PASSWORD}-new`;
+    await signIn();
+    await newPasswordInput.fill(newPassword);
+    await dialog.getByRole('button', { name: 'אישור', exact: true }).click();
+    await acknowledge(page, 'סיסמה שונתה בהצלחה!');
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { name: `שלום, ${user.name}!` })).toBeVisible();
+
+    // The session survives a reload, and the new password is the one that works from now on
+    await page.reload();
+    await expect(page.getByRole('heading', { name: `שלום, ${user.name}!` })).toBeVisible();
+    const oldLogin = await request.post('/api/auth/login', { data: { email: user.email, password: PASSWORD } });
+    expect(oldLogin.status()).toBe(401);
+    const newLogin = await request.post('/api/auth/login', { data: { email: user.email, password: newPassword } });
+    expect(newLogin.status()).toBe(200);
+    expect((await newLogin.json()).requiresPasswordReset).toBe(false);
   });
 
   test('protected routes redirect to /login when logged out', async ({ page }) => {

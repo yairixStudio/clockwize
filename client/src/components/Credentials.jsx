@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Key, Eye, EyeOff, Copy, ExternalLink, Plus, Edit2, Trash2 } from 'lucide-react';
 
 function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projectId }) {
+    const uid = useId();
     const [formData, setFormData] = useState({
         service_name: '',
         username: '',
@@ -63,8 +64,9 @@ function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projec
 
                 <form onSubmit={handleSubmit} className="modal-content">
                     <div className="form-group">
-                        <label>שם השירות *</label>
+                        <label htmlFor={`${uid}-service-name`}>שם השירות *</label>
                         <input
+                            id={`${uid}-service-name`}
                             type="text"
                             value={formData.service_name}
                             onChange={e => setFormData({ ...formData, service_name: e.target.value })}
@@ -75,8 +77,9 @@ function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projec
                     </div>
 
                     <div className="form-group">
-                        <label>שם משתמש / אימייל</label>
+                        <label htmlFor={`${uid}-username`}>שם משתמש / אימייל</label>
                         <input
+                            id={`${uid}-username`}
                             type="text"
                             value={formData.username}
                             onChange={e => setFormData({ ...formData, username: e.target.value })}
@@ -85,9 +88,10 @@ function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projec
                     </div>
 
                     <div className="form-group">
-                        <label>סיסמה</label>
+                        <label htmlFor={`${uid}-password`}>סיסמה</label>
                         <div className="password-input-wrapper">
                             <input
+                                id={`${uid}-password`}
                                 type={showPassword ? 'text' : 'password'}
                                 value={formData.password}
                                 onChange={e => setFormData({ ...formData, password: e.target.value })}
@@ -104,8 +108,9 @@ function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projec
                     </div>
 
                     <div className="form-group">
-                        <label>כתובת URL</label>
+                        <label htmlFor={`${uid}-url`}>כתובת URL</label>
                         <input
+                            id={`${uid}-url`}
                             type="url"
                             value={formData.url}
                             onChange={e => setFormData({ ...formData, url: e.target.value })}
@@ -115,8 +120,9 @@ function CredentialModal({ isOpen, onClose, onSave, credential, clientId, projec
                     </div>
 
                     <div className="form-group">
-                        <label>הערות</label>
+                        <label htmlFor={`${uid}-notes`}>הערות</label>
                         <textarea
+                            id={`${uid}-notes`}
                             value={formData.notes}
                             onChange={e => setFormData({ ...formData, notes: e.target.value })}
                             placeholder="הערות נוספות..."

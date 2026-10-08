@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { Plus, Play, Pause, Square, X, Edit2, Trash2, Clock, CheckSquare, Bell, DollarSign, CreditCard, AlertCircle, AlertTriangle, CheckCircle2, MessageSquare, Folder, TrendingUp, Share2, Globe, Mail, Phone, Key, FileText, StickyNote, Circle, CircleCheck, ChevronDown, ChevronUp, Copy, ChevronLeft, ListTodo } from 'lucide-react';
@@ -38,6 +38,7 @@ function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const { setStats: setGlobalStats } = useOutletContext();
   const modal = useModal();
+  const uid = useId();
   const { activeTimers, startTimer, pauseTimer, resumeTimer, stopTimer, discardTimer, getTimerForProject, integrations, isAddonEnabled } = useStore();
 
   // Get initial tab from URL param or default to 'tasks'
@@ -1497,8 +1498,9 @@ function ProjectDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                 <textarea
+                  id={`${uid}-stop-notes`}
                   className="form-input"
                   value={stopNotes}
                   onChange={e => setStopNotes(e.target.value)}

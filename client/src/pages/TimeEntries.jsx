@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Clock, Calendar, Folder, Tag, Search, Filter, Play, Pause, Square, Plus, ChevronDown, ChevronUp } from 'lucide-react';
@@ -67,6 +67,7 @@ function IntervalsDisplay({ entryId }) {
 function TimeEntries() {
   const { activeTimers, startTimer, pauseTimer, resumeTimer, stopTimer, getTimerForProject } = useStore();
   const modal = useModal();
+  const uid = useId();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -401,8 +402,9 @@ function TimeEntries() {
               </div>
               
               <div className="form-group">
-                <label className="form-label">הערות (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                 <textarea 
+                  id={`${uid}-stop-notes`}
                   className="form-input"
                   value={stopNotes}
                   onChange={e => setStopNotes(e.target.value)}

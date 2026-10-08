@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { shareAPI } from '../services/api';
 import { useModal } from './Modal';
@@ -13,6 +13,7 @@ function ShareModal({
   onSuccess
 }) {
   const modal = useModal();
+  const uid = useId();
   const [shareType, setShareType] = useState('public');
   const [password, setPassword] = useState('');
   const [allowedEmail, setAllowedEmail] = useState('');
@@ -163,8 +164,9 @@ function ShareModal({
                     // Edit mode
                     <div className="link-edit-form">
                       <div className="form-group">
-                        <label>שם הלינק</label>
+                        <label htmlFor={`${uid}-edit-name-${link.id}`}>שם הלינק</label>
                         <input
+                          id={`${uid}-edit-name-${link.id}`}
                           type="text"
                           className="form-input"
                           value={editingLink.name || ''}
@@ -174,8 +176,9 @@ function ShareModal({
                       </div>
 
                       <div className="form-group">
-                        <label>סוג הגנה</label>
+                        <label htmlFor={`${uid}-edit-share-type-${link.id}`}>סוג הגנה</label>
                         <select
+                          id={`${uid}-edit-share-type-${link.id}`}
                           className="form-input"
                           value={editingLink.share_type}
                           onChange={e => setEditingLink({ ...editingLink, share_type: e.target.value })}
@@ -188,8 +191,9 @@ function ShareModal({
 
                       {editingLink.share_type === 'password' && (
                         <div className="form-group">
-                          <label>סיסמא חדשה (השאר ריק לשמירת הקיימת)</label>
+                          <label htmlFor={`${uid}-edit-password-${link.id}`}>סיסמא חדשה (השאר ריק לשמירת הקיימת)</label>
                           <input
+                            id={`${uid}-edit-password-${link.id}`}
                             type="password"
                             className="form-input"
                             value={editingLink.newPassword || ''}
@@ -201,8 +205,9 @@ function ShareModal({
 
                       {editingLink.share_type === 'email' && (
                         <div className="form-group">
-                          <label>כתובת מייל מורשית</label>
+                          <label htmlFor={`${uid}-edit-email-${link.id}`}>כתובת מייל מורשית</label>
                           <input
+                            id={`${uid}-edit-email-${link.id}`}
                             type="email"
                             className="form-input ltr"
                             value={editingLink.allowed_email || ''}
@@ -294,8 +299,9 @@ function ShareModal({
               <h3>{links.length > 0 ? 'צור לינק נוסף' : 'צור לינק שיתוף'}</h3>
 
               <div className="form-group">
-                <label>שם הלינק (אופציונלי)</label>
+                <label htmlFor={`${uid}-link-name`}>שם הלינק (אופציונלי)</label>
                 <input
+                  id={`${uid}-link-name`}
                   type="text"
                   className="form-input"
                   value={linkName}
@@ -305,8 +311,8 @@ function ShareModal({
               </div>
 
               <div className="form-group">
-                <label>סוג הגנה</label>
-                <div className="share-type-options">
+                <label id={`${uid}-share-type-label`}>סוג הגנה</label>
+                <div className="share-type-options" role="radiogroup" aria-labelledby={`${uid}-share-type-label`}>
                   <label className={`share-type-option ${shareType === 'public' ? 'selected' : ''}`}>
                     <input
                       type="radio"
@@ -350,8 +356,9 @@ function ShareModal({
 
               {shareType === 'password' && (
                 <div className="form-group">
-                  <label>סיסמא לצפייה</label>
+                  <label htmlFor={`${uid}-password`}>סיסמא לצפייה</label>
                   <input
+                    id={`${uid}-password`}
                     type="password"
                     className="form-input"
                     value={password}
@@ -364,8 +371,9 @@ function ShareModal({
 
               {shareType === 'email' && (
                 <div className="form-group">
-                  <label>כתובת מייל מורשית</label>
+                  <label htmlFor={`${uid}-allowed-email`}>כתובת מייל מורשית</label>
                   <input
+                    id={`${uid}-allowed-email`}
                     type="email"
                     className="form-input ltr"
                     value={allowedEmail}

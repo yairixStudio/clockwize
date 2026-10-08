@@ -8,6 +8,42 @@ import './StatsBar.css';
 const toDateInputValue = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
+// A dashboard range covers whole local calendar days: from local 00:00:00.000 of the first day to
+// local 23:59:59.999 of the last. new Date('YYYY-MM-DD') would be UTC midnight (03:00 in Israel).
+// The Dashboard sends these with toISOString(), i.e. as exact instants that the server uses as-is.
+export const buildLocalDayRange = (startValue, endValue) => {
+  const [startYear, startMonth, startDay] = String(startValue).split('-').map(Number);
+  const [endYear, endMonth, endDay] = String(endValue).split('-').map(Number);
+  return {
+    start: new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0),
+    end: new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999)
+  };
+};
+
+// The month of `date` as whole local days: the 1st 00:00:00.000 to the last day 23:59:59.999
+export const buildLocalMonthRange = (date) => ({
+  start: new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0),
+  end: new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
+});
+
+// Query params for /stats/dashboard: the custom range, or else the selected month, as exact
+// instants of local start/end of day. month/year tell the server it is the month view.
+export const buildDashboardStatsParams = ({ dateRange, selectedMonth } = {}) => {
+  if (dateRange) {
+    return { startDate: dateRange.start.toISOString(), endDate: dateRange.end.toISOString() };
+  }
+  if (selectedMonth) {
+    const { start, end } = buildLocalMonthRange(selectedMonth);
+    return {
+      month: selectedMonth.getMonth(),
+      year: selectedMonth.getFullYear(),
+      startDate: start.toISOString(),
+      endDate: end.toISOString()
+    };
+  }
+  return {};
+};
+
 function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeChange }) {
   const navigate = useNavigate();
   const [showDateModal, setShowDateModal] = useState(false);
@@ -58,9 +94,7 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
 
   const handleApplyDateRange = () => {
     if (tempStartDate && tempEndDate) {
-      const start = new Date(tempStartDate);
-      const end = new Date(tempEndDate);
-      end.setHours(23, 59, 59, 999); // Include the entire end day
+      const { start, end } = buildLocalDayRange(tempStartDate, tempEndDate);
       
       if (start <= end) {
         onDateRangeChange?.({ start, end });

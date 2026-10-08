@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { Check, AlertCircle, Loader, Search, Settings, LogOut } from 'lucide-react';
 import api from '../../services/api';
 import '../../pages/Settings.css';
@@ -97,6 +97,7 @@ function SearchableSelect({ options, value, onChange, placeholder }) {
 }
 
 const MorningSettings = ({ integration, onUpdate }) => {
+    const uid = useId();
     const [connecting, setConnecting] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [apiSecret, setApiSecret] = useState('');
@@ -540,8 +541,9 @@ const MorningSettings = ({ integration, onUpdate }) => {
         <div className="integration-body">
             <form onSubmit={handleConnect} className="connect-form">
                 <div className="form-group">
-                    <label className="form-label">API Key (ID)</label>
+                    <label className="form-label" htmlFor={`${uid}-api-key`}>API Key (ID)</label>
                     <input
+                        id={`${uid}-api-key`}
                         type="text"
                         className="form-input"
                         value={apiKey}
@@ -551,8 +553,9 @@ const MorningSettings = ({ integration, onUpdate }) => {
                     />
                 </div>
                 <div className="form-group">
-                    <label className="form-label">API Secret</label>
+                    <label className="form-label" htmlFor={`${uid}-api-secret`}>API Secret</label>
                     <input
+                        id={`${uid}-api-secret`}
                         type="password"
                         className="form-input"
                         value={apiSecret}

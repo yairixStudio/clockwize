@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Clock, Plus, X, Trash2, GripVertical, Repeat, ListTodo, Timer, Bell, UserPlus } from 'lucide-react';
 import { timerAPI, clientsAPI, projectsAPI, plannedSlotsAPI, leadsAPI, remindersAPI } from '../services/api';
@@ -175,6 +175,7 @@ function computeTimeGridLayout(entries, hourHeight = HOUR_HEIGHT) {
 function Schedule() {
   const navigate = useNavigate();
   const modal = useModal();
+  const uid = useId();
   const [view, setView] = useState('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [entries, setEntries] = useState([]);
@@ -1257,8 +1258,9 @@ function Schedule() {
             {slotForm.slot_type === 'client' ? (
               <>
                 <div className="slot-field">
-                  <label>לקוח *</label>
+                  <label htmlFor={`${uid}-client`}>לקוח *</label>
                   <select
+                    id={`${uid}-client`}
                     value={slotForm.client_id}
                     onChange={e => handleClientChange(e.target.value)}
                   >
@@ -1270,8 +1272,9 @@ function Schedule() {
                 </div>
 
                 <div className="slot-field">
-                  <label>פרויקט (אופציונלי)</label>
+                  <label htmlFor={`${uid}-project`}>פרויקט (אופציונלי)</label>
                   <select
+                    id={`${uid}-project`}
                     value={slotForm.project_id}
                     onChange={e => setSlotForm(prev => ({ ...prev, project_id: e.target.value }))}
                     disabled={!slotForm.client_id}
@@ -1285,8 +1288,9 @@ function Schedule() {
               </>
             ) : (
               <div className="slot-field">
-                <label>ליד *</label>
+                <label htmlFor={`${uid}-lead`}>ליד *</label>
                 <select
+                  id={`${uid}-lead`}
                   value={slotForm.lead_id}
                   onChange={e => setSlotForm(prev => ({ ...prev, lead_id: e.target.value }))}
                 >
@@ -1299,8 +1303,8 @@ function Schedule() {
             )}
 
             <div className="slot-field">
-              <label>משך זמן *</label>
-              <div className="duration-inputs">
+              <label id={`${uid}-duration-label`}>משך זמן *</label>
+              <div className="duration-inputs" role="group" aria-labelledby={`${uid}-duration-label`}>
                 <div className="duration-input-group">
                   <input
                     type="number"
@@ -1326,8 +1330,9 @@ function Schedule() {
             </div>
 
             <div className="slot-field">
-              <label>הערות</label>
+              <label htmlFor={`${uid}-notes`}>הערות</label>
               <textarea
+                id={`${uid}-notes`}
                 value={slotForm.notes}
                 onChange={e => setSlotForm(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="הערות לתכנון..."

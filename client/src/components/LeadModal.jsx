@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { X, Building2 } from 'lucide-react';
 import { leadsAPI, clientSourcesAPI, clientsAPI } from '../services/api';
 import { useModal } from './Modal';
@@ -6,6 +6,7 @@ import { LEAD_STATUSES, LEAD_PRIORITIES, LEAD_SOURCE_TYPES } from '../utils/lead
 
 function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [], initialClientId = null }) {
   const modal = useModal();
+  const uid = useId();
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState([]);
   const [clients, setClients] = useState([]);
@@ -155,8 +156,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
 
           {isOpportunity && (
             <div className="form-group" style={{ marginBottom: '0.75rem' }}>
-              <label className="form-label">לקוח מקושר *</label>
+              <label className="form-label" htmlFor={`${uid}-client-id`}>לקוח מקושר *</label>
               <select
+                id={`${uid}-client-id`}
                 className="form-input"
                 value={form.client_id}
                 onChange={(e) => setForm({ ...form, client_id: e.target.value })}
@@ -171,8 +173,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
 
           <div className="form-grid">
             <div className="form-group">
-              <label className="form-label">שם *</label>
+              <label className="form-label" htmlFor={`${uid}-name`}>שם *</label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 className="form-input"
                 value={form.name}
@@ -183,8 +186,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">חברה</label>
+              <label className="form-label" htmlFor={`${uid}-company`}>חברה</label>
               <input
+                id={`${uid}-company`}
                 type="text"
                 className="form-input"
                 value={form.company}
@@ -194,8 +198,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">אימייל</label>
+              <label className="form-label" htmlFor={`${uid}-email`}>אימייל</label>
               <input
+                id={`${uid}-email`}
                 type="email"
                 className="form-input"
                 value={form.email}
@@ -205,8 +210,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">טלפון</label>
+              <label className="form-label" htmlFor={`${uid}-phone`}>טלפון</label>
               <input
+                id={`${uid}-phone`}
                 type="tel"
                 className="form-input"
                 value={form.phone}
@@ -216,8 +222,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">סטטוס</label>
+              <label className="form-label" htmlFor={`${uid}-status`}>סטטוס</label>
               <select
+                id={`${uid}-status`}
                 className="form-input"
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
@@ -229,8 +236,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">עדיפות</label>
+              <label className="form-label" htmlFor={`${uid}-priority`}>עדיפות</label>
               <select
+                id={`${uid}-priority`}
                 className="form-input"
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value })}
@@ -242,8 +250,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">סוג מקור</label>
+              <label className="form-label" htmlFor={`${uid}-source-type`}>סוג מקור</label>
               <select
+                id={`${uid}-source-type`}
                 className="form-input"
                 value={form.source_type}
                 onChange={(e) => setForm({ ...form, source_type: e.target.value })}
@@ -255,8 +264,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">מקור (קטגוריה)</label>
+              <label className="form-label" htmlFor={`${uid}-source-id`}>מקור (קטגוריה)</label>
               <select
+                id={`${uid}-source-id`}
                 className="form-input"
                 value={form.source_id}
                 onChange={(e) => setForm({ ...form, source_id: e.target.value })}
@@ -269,8 +279,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">פרטי מקור</label>
+              <label className="form-label" htmlFor={`${uid}-source-detail`}>פרטי מקור</label>
               <input
+                id={`${uid}-source-detail`}
                 type="text"
                 className="form-input"
                 value={form.source_detail}
@@ -280,8 +291,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">ערך צפוי (₪)</label>
+              <label className="form-label" htmlFor={`${uid}-expected-value`}>ערך צפוי (₪)</label>
               <input
+                id={`${uid}-expected-value`}
                 type="number"
                 className="form-input"
                 value={form.expected_value}
@@ -291,8 +303,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">תאריך סגירה צפוי</label>
+              <label className="form-label" htmlFor={`${uid}-expected-close-date`}>תאריך סגירה צפוי</label>
               <input
+                id={`${uid}-expected-close-date`}
                 type="date"
                 className="form-input"
                 value={form.expected_close_date}
@@ -301,8 +314,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
             </div>
 
             <div className="form-group">
-              <label className="form-label">אחראי</label>
+              <label className="form-label" htmlFor={`${uid}-assigned-to`}>אחראי</label>
               <select
+                id={`${uid}-assigned-to`}
                 className="form-input"
                 value={form.assigned_to}
                 onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
@@ -316,8 +330,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
           </div>
 
           <div className="form-group" style={{ marginTop: '0.75rem' }}>
-            <label className="form-label">תגיות (מופרדות בפסיק)</label>
+            <label className="form-label" htmlFor={`${uid}-tags`}>תגיות (מופרדות בפסיק)</label>
             <input
+              id={`${uid}-tags`}
               type="text"
               className="form-input"
               value={form.tags}
@@ -327,8 +342,9 @@ function LeadModal({ isOpen, onClose, lead = null, onSaved, workspaceMembers = [
           </div>
 
           <div className="form-group" style={{ marginTop: '0.75rem' }}>
-            <label className="form-label">הערות</label>
+            <label className="form-label" htmlFor={`${uid}-notes`}>הערות</label>
             <textarea
+              id={`${uid}-notes`}
               className="form-input"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}

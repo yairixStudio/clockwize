@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
@@ -6,6 +6,7 @@ import { clientsAPI } from '../services/api';
 
 function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = null }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const formRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -123,8 +124,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">שם הפרויקט *</label>
+              <label className="form-label" htmlFor={`${uid}-name`}>שם הפרויקט *</label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 name="name"
                 className="form-input"
@@ -135,8 +137,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
 
             <div className="form-group">
-              <label className="form-label">לקוח *</label>
+              <label className="form-label" htmlFor={`${uid}-client_id`}>לקוח *</label>
               <select
+                id={`${uid}-client_id`}
                 name="client_id"
                 className="form-input"
                 value={formData.client_id}
@@ -152,8 +155,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">תיאור</label>
+              <label className="form-label" htmlFor={`${uid}-description`}>תיאור</label>
               <textarea
+                id={`${uid}-description`}
                 name="description"
                 className="form-input"
                 value={formData.description}
@@ -163,8 +167,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">סוג תמחור</label>
+              <label className="form-label" htmlFor={`${uid}-pricing_type`}>סוג תמחור</label>
               <select
+                id={`${uid}-pricing_type`}
                 name="pricing_type"
                 className="form-input"
                 value={formData.pricing_type}
@@ -178,8 +183,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             
             {pricingType === 'fixed' ? (
               <div className="form-group">
-                <label className="form-label">מחיר קבוע (₪)</label>
+                <label className="form-label" htmlFor={`${uid}-fixed_price`}>מחיר קבוע (₪)</label>
                 <input
+                  id={`${uid}-fixed_price`}
                   type="number"
                   name="fixed_price"
                   className="form-input"
@@ -192,8 +198,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
               </div>
             ) : pricingType === 'hourly' ? (
               <div className="form-group">
-                <label className="form-label">מחיר לשעה (₪)</label>
+                <label className="form-label" htmlFor={`${uid}-hourly_rate`}>מחיר לשעה (₪)</label>
                 <input
+                  id={`${uid}-hourly_rate`}
                   type="number"
                   name="hourly_rate"
                   className="form-input"
@@ -208,8 +215,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             ) : null}
             
             <div className="form-group">
-              <label className="form-label">סטטוס</label>
+              <label className="form-label" htmlFor={`${uid}-status`}>סטטוס</label>
               <select
+                id={`${uid}-status`}
                 name="status"
                 className="form-input"
                 value={formData.status}
@@ -226,8 +234,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">🎯 חשיבות</label>
+              <label className="form-label" htmlFor={`${uid}-priority`}>🎯 חשיבות</label>
               <select
+                id={`${uid}-priority`}
                 name="priority"
                 className="form-input"
                 value={formData.priority}
@@ -240,8 +249,8 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">📱 פלטפורמת התקשרות</label>
-              <div className="platform-chips">
+              <label className="form-label" id={`${uid}-communication-platforms-label`}>📱 פלטפורמת התקשרות</label>
+              <div className="platform-chips" role="group" aria-labelledby={`${uid}-communication-platforms-label`}>
                 {[
                   { value: 'whatsapp', label: 'ווצאפ' },
                   { value: 'email', label: 'מייל' },
@@ -262,8 +271,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
 
             <div className="form-group">
-              <label className="form-label">⏱️ שעות משוערות</label>
+              <label className="form-label" htmlFor={`${uid}-estimated_hours`}>⏱️ שעות משוערות</label>
               <input
+                id={`${uid}-estimated_hours`}
                 type="number"
                 name="estimated_hours"
                 className="form-input"
@@ -278,8 +288,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">💵 סכום ששולם (₪)</label>
+              <label className="form-label" htmlFor={`${uid}-paid_amount`}>💵 סכום ששולם (₪)</label>
               <input
+                id={`${uid}-paid_amount`}
                 type="number"
                 name="paid_amount"
                 className="form-input"
@@ -293,8 +304,9 @@ function ProjectModal({ project, clientHourlyRate, onSave, onClose, clientId = n
             </div>
             
             <div className="form-group">
-              <label className="form-label">📝 פתק פרטי (לעצמך)</label>
+              <label className="form-label" htmlFor={`${uid}-notes`}>📝 פתק פרטי (לעצמך)</label>
               <textarea
+                id={`${uid}-notes`}
                 name="notes"
                 className="form-input notes-input"
                 value={formData.notes}

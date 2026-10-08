@@ -81,14 +81,11 @@ export async function loginInBrowser(page, session, path = '/') {
 
 // ---------- UI helpers ----------
 
-// The app's forms put <label class="form-label"> next to the control without htmlFor/id, so
-// getByLabel can't resolve them. Find the .form-group that owns the label text instead.
+// The app's form labels are tied to their controls (<label htmlFor> + id), so look fields up with
+// Playwright's getByLabel, scoped to the form or modal: modal.getByLabel('שם לקוח *', { exact: true }).
+// field() is kept for older specs; it matches the label text as a substring like it used to.
 export function field(scope, labelText) {
-  return scope
-    .locator('.form-group')
-    .filter({ has: scope.page().locator('.form-label', { hasText: labelText }) })
-    .locator('input, select, textarea')
-    .first();
+  return scope.getByLabel(labelText).first();
 }
 
 // Form modals (ClientModal / ProjectModal / TaskModal / stop-timer) have no role="dialog";

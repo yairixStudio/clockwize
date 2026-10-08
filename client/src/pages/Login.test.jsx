@@ -28,6 +28,9 @@ const { authAPI, passkeysAPI, timerAPI, addonsAPI } = apiMocks;
 const initialState = useStore.getState();
 
 const workspace = { id: 'ws-1', name: 'אישי', role: 'owner' };
+// What the server sends instead of a session when the admin flagged the account
+const resetRequired = () => ({ requiresPasswordReset: true, resetToken: 'reset-jwt' });
+
 const authResponse = (extra = {}) => ({
   user: { id: 'u1', name: 'דנה', email: 'dana@example.com' },
   token: 'jwt-token',
@@ -212,7 +215,7 @@ describe('Login - password login', () => {
 
 describe('Login - forced password reset', () => {
   it('asks for a new password instead of going to the dashboard', async () => {
-    authAPI.login.mockResolvedValue(authResponse({ requiresPasswordReset: true }));
+    authAPI.login.mockResolvedValue(resetRequired());
     const user = renderLogin();
 
     await fillAndSubmit(user, 'dana@example.com', 'old-pw');
@@ -222,23 +225,83 @@ describe('Login - forced password reset', () => {
     expect(screen.queryByText('דשבורד')).not.toBeInTheDocument();
   });
 
+  it('does not log the user in before the password was reset', async () => {
+    authAPI.login.mockResolvedValue(resetRequired());
+    const user = renderLogin();
+
+    await fillAndSubmit(user, 'dana@example.com', 'old-pw');
+    await screen.findByRole('heading', { name: 'נדרש איפוס סיסמה' });
+
+    expect(useStore.getState().isAuthenticated).toBe(false);
+    expect(useStore.getState().user).toBeNull();
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('currentWorkspaceId')).toBeNull();
+  });
+
   it('resets the password with the old one and then continues to the dashboard', async () => {
-    authAPI.login.mockResolvedValue(authResponse({ requiresPasswordReset: true }));
-    authAPI.resetPassword.mockResolvedValue({ success: true });
+    authAPI.login.mockResolvedValue(resetRequired());
+    authAPI.resetPassword.mockResolvedValue({ message: 'סיסמה שונתה בהצלחה', ...authResponse(), token: 'session-after-reset' });
     const user = renderLogin();
 
     await fillAndSubmit(user, 'dana@example.com', 'old-pw');
     await user.type(await screen.findByPlaceholderText('סיסמה חדשה'), 'new-pw');
     await user.click(screen.getByRole('button', { name: 'אישור' }));
 
-    expect(authAPI.resetPassword).toHaveBeenCalledWith({ userId: 'u1', oldPassword: 'old-pw', newPassword: 'new-pw' });
+    expect(authAPI.resetPassword).toHaveBeenCalledWith({ resetToken: 'reset-jwt', newPassword: 'new-pw' });
     expect(await screen.findByText('סיסמה שונתה בהצלחה!')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'אישור' }));
     expect(await screen.findByText('דשבורד')).toBeInTheDocument();
+    expect(useStore.getState().isAuthenticated).toBe(true);
+    expect(localStorage.getItem('token')).toBe('session-after-reset');
+    expect(localStorage.getItem('currentWorkspaceId')).toBe('ws-1');
+  });
+
+  it('continues to a pending workspace invite after the reset', async () => {
+    localStorage.setItem('pendingInviteCode', 'ABC123');
+    authAPI.login.mockResolvedValue(resetRequired());
+    authAPI.resetPassword.mockResolvedValue({ ...authResponse(), token: 'reset-token' });
+    const user = renderLogin();
+
+    await fillAndSubmit(user);
+    await user.type(await screen.findByPlaceholderText('סיסמה חדשה'), 'new-pw');
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    await user.click(await screen.findByRole('button', { name: 'אישור' }));
+
+    expect(await screen.findByText('הצטרפות ABC123')).toBeInTheDocument();
+  });
+
+  it('shows a failed reset and asks again', async () => {
+    authAPI.login.mockResolvedValue(resetRequired());
+    authAPI.resetPassword.mockRejectedValue(Object.assign(new Error('הסיסמה החדשה חייבת להיות שונה מהסיסמה הנוכחית'), { status: 400 }));
+    const user = renderLogin();
+
+    await fillAndSubmit(user);
+    await user.type(await screen.findByPlaceholderText('סיסמה חדשה'), 'new-pw');
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+
+    expect(await screen.findByText('הסיסמה החדשה חייבת להיות שונה מהסיסמה הנוכחית')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    expect(await screen.findByRole('heading', { name: 'נדרש איפוס סיסמה' })).toBeInTheDocument();
+    expect(useStore.getState().isAuthenticated).toBe(false);
+  });
+
+  it('an expired reset token ends the reset: the user signs in again', async () => {
+    authAPI.login.mockResolvedValue(resetRequired());
+    authAPI.resetPassword.mockRejectedValue(Object.assign(new Error('תוקף האיפוס פג. התחבר שוב כדי להגדיר סיסמה חדשה'), { status: 401 }));
+    const user = renderLogin();
+
+    await fillAndSubmit(user);
+    await user.type(await screen.findByPlaceholderText('סיסמה חדשה'), 'new-pw');
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+
+    expect(await screen.findByText('תוקף האיפוס פג. התחבר שוב כדי להגדיר סיסמה חדשה')).toHaveClass('auth-error');
+    expect(screen.queryByRole('heading', { name: 'נדרש איפוס סיסמה' })).not.toBeInTheDocument();
+    expect(authAPI.resetPassword).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().isAuthenticated).toBe(false);
   });
 
   it('shows an error when the reset prompt is cancelled', async () => {
-    authAPI.login.mockResolvedValue(authResponse({ requiresPasswordReset: true }));
+    authAPI.login.mockResolvedValue(resetRequired());
     const user = renderLogin();
 
     await fillAndSubmit(user);
@@ -247,10 +310,12 @@ describe('Login - forced password reset', () => {
 
     expect(await screen.findByText('חובה לשנות סיסמה כדי להמשיך')).toBeInTheDocument();
     expect(authAPI.resetPassword).not.toHaveBeenCalled();
+    expect(useStore.getState().isAuthenticated).toBe(false);
+    expect(localStorage.getItem('token')).toBeNull();
   });
 
   it('rejects a new password shorter than 4 characters and asks again', async () => {
-    authAPI.login.mockResolvedValue(authResponse({ requiresPasswordReset: true }));
+    authAPI.login.mockResolvedValue(resetRequired());
     const user = renderLogin();
 
     await fillAndSubmit(user);
@@ -264,15 +329,16 @@ describe('Login - forced password reset', () => {
     expect(await screen.findByRole('heading', { name: 'נדרש איפוס סיסמה' })).toBeInTheDocument();
   });
 
-  // Login passes { type: 'password' } to modal.prompt, but prompt() uses `type` as the modal
-  // style and CustomModal always renders <input type="text">, so the new password is visible
-  it.fails('masks the new password while it is typed', async () => {
-    authAPI.login.mockResolvedValue(authResponse({ requiresPasswordReset: true }));
+  it('masks the new password while it is typed', async () => {
+    authAPI.login.mockResolvedValue(resetRequired());
     const user = renderLogin();
 
     await fillAndSubmit(user);
 
-    expect(await screen.findByPlaceholderText('סיסמה חדשה')).toHaveAttribute('type', 'password');
+    const input = await screen.findByLabelText('הזן סיסמה חדשה (לפחות 4 תווים):');
+    expect(input).toHaveAttribute('type', 'password');
+    expect(input).toHaveAttribute('autocomplete', 'new-password');
+    expect(input).toHaveAttribute('placeholder', 'סיסמה חדשה');
   });
 });
 
@@ -291,6 +357,24 @@ describe('Login - passkey', () => {
     expect(webauthn.startAuthentication).toHaveBeenCalledWith({ optionsJSON: { challenge: 'abc' } });
     expect(passkeysAPI.loginVerify).toHaveBeenCalledWith({ flowId: 'flow-1', response: { id: 'cred-1' } });
     expect(localStorage.getItem('token')).toBe('jwt-token');
+  });
+
+  it('a flagged account signing in with a passkey sets a new password first', async () => {
+    passkeysAPI.loginOptions.mockResolvedValue({ flowId: 'flow-1', options: {} });
+    webauthn.startAuthentication.mockResolvedValue({ id: 'cred-1' });
+    passkeysAPI.loginVerify.mockResolvedValue(resetRequired());
+    authAPI.resetPassword.mockResolvedValue({ ...authResponse(), token: 'session-after-reset' });
+    const user = renderLogin();
+
+    await user.click(screen.getByRole('button', { name: 'התחבר עם Passkey' }));
+    await user.type(await screen.findByLabelText('הזן סיסמה חדשה (לפחות 4 תווים):'), 'new-pw');
+    expect(useStore.getState().isAuthenticated).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'אישור' }));
+    await user.click(await screen.findByRole('button', { name: 'אישור' }));
+
+    expect(await screen.findByText('דשבורד')).toBeInTheDocument();
+    expect(authAPI.resetPassword).toHaveBeenCalledWith({ resetToken: 'reset-jwt', newPassword: 'new-pw' });
+    expect(localStorage.getItem('token')).toBe('session-after-reset');
   });
 
   it('shows a waiting state while the browser dialog is open', async () => {

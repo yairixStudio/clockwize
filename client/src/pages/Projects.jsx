@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Edit2, Trash2, Play, Pause, Square, Folder } from 'lucide-react';
@@ -14,6 +14,7 @@ import './Projects.css';
 function Projects() {
     const { activeTimers, startTimer, pauseTimer, resumeTimer, stopTimer, getTimerForProject } = useStore();
     const modal = useModal();
+    const uid = useId();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -365,8 +366,9 @@ function Projects() {
                             </div>
                             
                             <div className="form-group">
-                                <label className="form-label">הערות (אופציונלי)</label>
+                                <label className="form-label" htmlFor={`${uid}-stop-notes`}>הערות (אופציונלי)</label>
                                 <textarea 
+                                    id={`${uid}-stop-notes`}
                                     className="form-input"
                                     value={stopNotes}
                                     onChange={e => setStopNotes(e.target.value)}

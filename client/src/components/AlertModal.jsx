@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 function AlertModal({ alert, projectId, onSave, onClose }) {
   useBodyScrollLock(true);
+  const uid = useId();
   const formRef = useRef(null);
   const [formData, setFormData] = useState({
     alert_type: '',
@@ -69,8 +70,9 @@ function AlertModal({ alert, projectId, onSave, onClose }) {
         <form ref={formRef} onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">סוג התראה *</label>
+              <label className="form-label" htmlFor={`${uid}-alert_type`}>סוג התראה *</label>
               <select
+                id={`${uid}-alert_type`}
                 name="alert_type"
                 className="form-input"
                 value={formData.alert_type}
@@ -87,10 +89,11 @@ function AlertModal({ alert, projectId, onSave, onClose }) {
 
             {showThresholdValue && (
               <div className="form-group">
-                <label className="form-label">
+                <label className="form-label" htmlFor={`${uid}-threshold_value`}>
                   {formData.alert_type === 'hours' ? 'סף שעות' : 'סף סכום (₪)'}
                 </label>
                 <input
+                  id={`${uid}-threshold_value`}
                   type="number"
                   name="threshold_value"
                   className="form-input"
@@ -107,8 +110,9 @@ function AlertModal({ alert, projectId, onSave, onClose }) {
 
             {showThresholdDays && (
               <div className="form-group">
-                <label className="form-label">מספר ימים לפני הדדליין</label>
+                <label className="form-label" htmlFor={`${uid}-threshold_days`}>מספר ימים לפני הדדליין</label>
                 <input
+                  id={`${uid}-threshold_days`}
                   type="number"
                   name="threshold_days"
                   className="form-input"
@@ -123,8 +127,9 @@ function AlertModal({ alert, projectId, onSave, onClose }) {
             )}
 
             <div className="form-group">
-              <label className="form-label">הערה / פעולה נדרשת</label>
+              <label className="form-label" htmlFor={`${uid}-message`}>הערה / פעולה נדרשת</label>
               <textarea
+                id={`${uid}-message`}
                 name="message"
                 className="form-input"
                 value={formData.message}

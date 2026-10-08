@@ -8,6 +8,7 @@ import StatsBar from './StatsBar';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
 import GlobalSearch from './GlobalSearch';
 import AIAssistant from './AIAssistant';
+import RouteSuspense from './RouteSuspense';
 import './Layout.css';
 
 const MIN_SIDEBAR_WIDTH = 180;
@@ -453,7 +454,10 @@ function Layout() {
         )}
 
         <div className="container content-container">
+          {/* Lazy pages load inside this boundary, so the sidebar and header stay while they do */}
+          <RouteSuspense>
           <Outlet context={{ setStats: setCurrentStats, selectedMonth, setSelectedMonth, dateRange, setDateRange }} />
+          </RouteSuspense>
         </div>
       </main>
 

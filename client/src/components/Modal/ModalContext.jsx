@@ -24,7 +24,9 @@ export function ModalProvider({ children }) {
     showCancel: false,
     isPrompt: false,
     promptValue: '',
-    placeholder: ''
+    placeholder: '',
+    inputType: 'text',
+    autoComplete: undefined
   });
 
   const closeModal = useCallback(() => {
@@ -90,12 +92,17 @@ export function ModalProvider({ children }) {
     });
   }, [closeModal]);
 
-  // Prompt - asks for text input
+  // Prompt - asks for text input.
+  // options.type is the modal style (like the other dialogs); options.inputType is the <input> type -
+  // pass inputType: 'password' to mask what is typed. 'password' is not a modal style, so the older
+  // { type: 'password' } spelling is read as inputType: 'password' with the default style.
   const prompt = useCallback((message, options = {}) => {
+    const legacyPasswordType = options.type === 'password';
+    const inputType = options.inputType || (legacyPasswordType ? 'password' : 'text');
     return new Promise((resolve) => {
       setModalState({
         isOpen: true,
-        type: options.type || 'info',
+        type: (!legacyPasswordType && options.type) || 'info',
         title: options.title || 'הזן ערך',
         message,
         confirmText: options.confirmText || 'אישור',
@@ -104,6 +111,8 @@ export function ModalProvider({ children }) {
         isPrompt: true,
         promptValue: '',
         placeholder: options.placeholder || '',
+        inputType,
+        autoComplete: options.autoComplete || (inputType === 'password' ? 'new-password' : undefined),
         onConfirm: (value) => {
           closeModal();
           resolve(value);
@@ -141,6 +150,8 @@ export function ModalProvider({ children }) {
         isPrompt={modalState.isPrompt}
         promptValue={modalState.promptValue}
         placeholder={modalState.placeholder}
+        inputType={modalState.inputType}
+        autoComplete={modalState.autoComplete}
         onConfirm={modalState.onConfirm}
         onCancel={modalState.onCancel}
       />

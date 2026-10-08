@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Save, Trash2, AlertTriangle } from 'lucide-react';
@@ -12,6 +12,7 @@ function Profile() {
   const { user, updateUser, logout } = useStore();
   const navigate = useNavigate();
   const modal = useModal();
+  const uid = useId();
   
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -23,7 +24,9 @@ function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
+  // The password - or, for a passkey-only account (no password to type), the account's email
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const passkeyOnly = user?.has_password === 0;
   
   // Lock body scroll when delete modal is open
   useBodyScrollLock(showDeleteModal);
@@ -56,11 +59,14 @@ function Profile() {
       };
       
       if (formData.password) {
-        updateData.currentPassword = formData.currentPassword;
+        // A passkey-only account sets its first password - it has no current one
+        if (!passkeyOnly) updateData.currentPassword = formData.currentPassword;
         updateData.password = formData.password;
       }
       
-      const updatedUser = await authAPI.updateProfile(updateData);
+      // A new password signs out the other sessions; this one continues with the fresh token
+      const { token, ...updatedUser } = await authAPI.updateProfile(updateData);
+      if (token) localStorage.setItem('token', token);
       updateUser(updatedUser);
       
       modal.success('הפרופיל עודכן בהצלחה');
@@ -78,13 +84,13 @@ function Profile() {
   };
   
   const handleDeleteAccount = async () => {
-    if (!deletePassword) {
-      modal.warning('נא להזין סיסמה');
+    if (!deleteConfirmation) {
+      modal.warning(passkeyOnly ? 'נא להקליד את כתובת האימייל' : 'נא להזין סיסמה');
       return;
     }
     
     try {
-      await authAPI.deleteAccount(deletePassword);
+      await authAPI.deleteAccount(passkeyOnly ? { confirmEmail: deleteConfirmation.trim() } : { password: deleteConfirmation });
       logout();
       navigate('/login');
     } catch (error) {
@@ -111,8 +117,9 @@ function Profile() {
             <h3 className="form-section-title">פרטים אישיים</h3>
             
             <div className="form-group">
-              <label className="form-label">שם מלא</label>
+              <label className="form-label" htmlFor={`${uid}-name`}>שם מלא</label>
               <input
+                id={`${uid}-name`}
                 type="text"
                 name="name"
                 className="form-input"
@@ -123,8 +130,9 @@ function Profile() {
             </div>
             
             <div className="form-group">
-              <label className="form-label">אימייל</label>
+              <label className="form-label" htmlFor={`${uid}-email`}>אימייל</label>
               <input
+                id={`${uid}-email`}
                 type="email"
                 name="email"
                 className="form-input"
@@ -137,11 +145,13 @@ function Profile() {
           </div>
           
           <div className="form-section">
-            <h3 className="form-section-title">שינוי סיסמה</h3>
+            <h3 className="form-section-title">{passkeyOnly ? 'הגדרת סיסמה' : 'שינוי סיסמה'}</h3>
             
+            {!passkeyOnly && (
             <div className="form-group">
-              <label className="form-label">סיסמה נוכחית</label>
+              <label className="form-label" htmlFor={`${uid}-currentPassword`}>סיסמה נוכחית</label>
               <input
+                id={`${uid}-currentPassword`}
                 type="password"
                 name="currentPassword"
                 className="form-input"
@@ -150,10 +160,12 @@ function Profile() {
                 dir="ltr"
               />
             </div>
+            )}
             
             <div className="form-group">
-              <label className="form-label">סיסמה חדשה</label>
+              <label className="form-label" htmlFor={`${uid}-password`}>סיסמה חדשה</label>
               <input
+                id={`${uid}-password`}
                 type="password"
                 name="password"
                 className="form-input"
@@ -165,8 +177,9 @@ function Profile() {
             </div>
             
             <div className="form-group">
-              <label className="form-label">אימות סיסמה חדשה</label>
+              <label className="form-label" htmlFor={`${uid}-confirmPassword`}>אימות סיסמה חדשה</label>
               <input
+                id={`${uid}-confirmPassword`}
                 type="password"
                 name="confirmPassword"
                 className="form-input"
@@ -208,16 +221,33 @@ function Profile() {
                 <p>פעולה זו היא בלתי הפיכה. כל הלקוחות, הפרויקטים, המשימות ורשומות הזמן שלך יימחקו לצמיתות.</p>
               </div>
               
-              <div className="form-group">
-                <label className="form-label">הזן את הסיסמה שלך לאישור</label>
-                <input
-                  type="password"
-                  className="form-input"
-                  value={deletePassword}
-                  onChange={e => setDeletePassword(e.target.value)}
-                  dir="ltr"
-                />
-              </div>
+              {passkeyOnly ? (
+                <div className="form-group">
+                  <label className="form-label" htmlFor={`${uid}-delete-email`}>הקלידו את האימייל שלכם לאישור</label>
+                  <input
+                    id={`${uid}-delete-email`}
+                    type="email"
+                    autoComplete="off"
+                    className="form-input"
+                    value={deleteConfirmation}
+                    onChange={e => setDeleteConfirmation(e.target.value)}
+                    placeholder={user?.email}
+                    dir="ltr"
+                  />
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label className="form-label" htmlFor={`${uid}-delete-password`}>הזן את הסיסמה שלך לאישור</label>
+                  <input
+                    id={`${uid}-delete-password`}
+                    type="password"
+                    className="form-input"
+                    value={deleteConfirmation}
+                    onChange={e => setDeleteConfirmation(e.target.value)}
+                    dir="ltr"
+                  />
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button onClick={handleDeleteAccount} className="btn btn-danger">

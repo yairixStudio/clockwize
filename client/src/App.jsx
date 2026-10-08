@@ -1,41 +1,67 @@
-import { useEffect, useState } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { authAPI } from './services/api';
 import useStore from './store/useStore';
 import { ModalProvider } from './components/Modal';
 import { TimerSyncProvider } from './components/TimerSyncProvider';
 import ErrorBoundary from './components/ErrorBoundary';
+import RouteSuspense from './components/RouteSuspense';
 
 // Layout
 import Layout from './components/Layout';
 import AuthLayout from './components/AuthLayout';
 
-// Pages
+// Pages on the first screen a user sees stay in the main bundle
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import ClientDetail from './pages/ClientDetail';
-import Projects from './pages/Projects';
-import ProjectDetail from './pages/ProjectDetail';
-import TaskDetail from './pages/TaskDetail';
-import Tasks from './pages/Tasks';
-import Profile from './pages/Profile';
-import SharedClient from './pages/SharedClient';
-import SharedProject from './pages/SharedProject';
-import SharedAccess from './pages/SharedAccess';
-import SharedWithMe from './pages/SharedWithMe';
-import Reminders from './pages/Reminders';
-import AdminPanel from './pages/AdminPanel';
-import SettingsPage from './pages/SettingsPage';
-import CredentialsPage from './pages/CredentialsPage';
-import LeadsManagement from './pages/LeadsManagement';
-import LeadDetail from './pages/LeadDetail';
-import TimeEntries from './pages/TimeEntries';
-import Payments from './pages/Payments';
-import Schedule from './pages/Schedule';
-import WorkspaceSettings from './pages/WorkspaceSettings';
-import JoinWorkspace from './pages/JoinWorkspace';
-import CatalogPage from './pages/CatalogPage';
+
+// The CSS of the lazy pages below, in its original cascade order (see routeStyles.js)
+import './routeStyles';
+
+// After a new build is deployed, an open tab still asks for the previous build's chunk files, which
+// are gone. Reload once to pick up the new build instead of showing the error screen.
+const RELOADED_FOR_CHUNK = 'clockwize:reloaded-for-chunk';
+const lazyPage = (load) => lazy(() => load().then(
+  (module) => {
+    try { sessionStorage.removeItem(RELOADED_FOR_CHUNK); } catch { /* storage unavailable */ }
+    return module;
+  },
+  (error) => {
+    let reloaded = true;
+    try {
+      reloaded = sessionStorage.getItem(RELOADED_FOR_CHUNK) === '1';
+      if (!reloaded) sessionStorage.setItem(RELOADED_FOR_CHUNK, '1');
+    } catch { /* storage unavailable - don't risk a reload loop */ }
+    if (reloaded) throw error;
+    window.location.reload();
+    return new Promise(() => {});
+  }
+));
+
+// Every other page is split into its own chunk, loaded on first visit
+const ClientDetail = lazyPage(() => import('./pages/ClientDetail'));
+const Projects = lazyPage(() => import('./pages/Projects'));
+const ProjectDetail = lazyPage(() => import('./pages/ProjectDetail'));
+const TaskDetail = lazyPage(() => import('./pages/TaskDetail'));
+const Tasks = lazyPage(() => import('./pages/Tasks'));
+const Profile = lazyPage(() => import('./pages/Profile'));
+const SharedClient = lazyPage(() => import('./pages/SharedClient'));
+const SharedProject = lazyPage(() => import('./pages/SharedProject'));
+const SharedAccess = lazyPage(() => import('./pages/SharedAccess'));
+const SharedWithMe = lazyPage(() => import('./pages/SharedWithMe'));
+const Reminders = lazyPage(() => import('./pages/Reminders'));
+const AdminPanel = lazyPage(() => import('./pages/AdminPanel'));
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage'));
+const CredentialsPage = lazyPage(() => import('./pages/CredentialsPage'));
+const LeadsManagement = lazyPage(() => import('./pages/LeadsManagement'));
+const LeadDetail = lazyPage(() => import('./pages/LeadDetail'));
+const TimeEntries = lazyPage(() => import('./pages/TimeEntries'));
+const Payments = lazyPage(() => import('./pages/Payments'));
+const Schedule = lazyPage(() => import('./pages/Schedule'));
+const WorkspaceSettings = lazyPage(() => import('./pages/WorkspaceSettings'));
+const JoinWorkspace = lazyPage(() => import('./pages/JoinWorkspace'));
+const CatalogPage = lazyPage(() => import('./pages/CatalogPage'));
 
 // Protected Route
 const ProtectedRoute = ({ children }) => {
@@ -138,6 +164,8 @@ function App() {
     <ErrorBoundary>
     <ModalProvider>
       <TimerSyncProvider>
+      {/* Pages inside Layout have their own boundary around the <Outlet>; this one covers the rest */}
+      <RouteSuspense fullPage>
       <Routes>
         {/* New unified share access (with password/email support) */}
         <Route path="/s/:token" element={<SharedAccess />} />
@@ -206,6 +234,7 @@ function App() {
         {/* Catch all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </RouteSuspense>
       </TimerSyncProvider>
     </ModalProvider>
     </ErrorBoundary>

@@ -76,11 +76,12 @@ export const authAPI = {
       body: JSON.stringify(data)
     }).then(handleResponse),
 
-  deleteAccount: (password) =>
+  // confirmation: { password } - or { confirmEmail } for a passkey-only account (user.has_password === 0)
+  deleteAccount: (confirmation) =>
     fetch(`${API_BASE}/auth/account`, {
       method: 'DELETE',
       headers: getHeaders(),
-      body: JSON.stringify({ password })
+      body: JSON.stringify(confirmation)
     }).then(handleResponse),
 
   resetPassword: (data) =>

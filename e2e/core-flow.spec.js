@@ -3,7 +3,6 @@ import {
   acknowledge,
   apiAs,
   confirmDialog,
-  field,
   loginInBrowser,
   modal,
   registerUser,
@@ -29,7 +28,7 @@ test.describe('core flow', () => {
     // --- Client (dashboard) ---
     await page.getByRole('button', { name: 'לקוח חדש', exact: true }).click();
     const clientModal = modal(page, 'לקוח חדש');
-    await field(clientModal, 'שם לקוח').fill(clientName);
+    await clientModal.getByLabel('שם לקוח *', { exact: true }).fill(clientName);
     await clientModal.getByRole('button', { name: 'שמור', exact: true }).click();
     await acknowledge(page, 'הלקוח נוסף בהצלחה');
     await expect(clientModal).toBeHidden();
@@ -42,8 +41,8 @@ test.describe('core flow', () => {
     await page.getByRole('button', { name: 'צור פרויקט חדש' }).click();
     const projectModal = modal(page, 'פרויקט חדש');
     // Opened from a client page, the client is preselected
-    await expect(field(projectModal, 'לקוח')).toHaveValue(/[\w-]{8,}/);
-    await field(projectModal, 'שם הפרויקט').fill(projectName);
+    await expect(projectModal.getByLabel('לקוח *', { exact: true })).toHaveValue(/[\w-]{8,}/);
+    await projectModal.getByLabel('שם הפרויקט *', { exact: true }).fill(projectName);
     await projectModal.getByRole('button', { name: 'שמור', exact: true }).click();
     await expect(projectModal).toBeHidden();
 
@@ -54,7 +53,7 @@ test.describe('core flow', () => {
     // --- Task (project page) ---
     await page.getByRole('button', { name: 'צור משימה חדשה' }).click();
     const taskModal = modal(page, 'משימה חדשה');
-    await field(taskModal, 'שם המשימה').fill(taskName);
+    await taskModal.getByLabel('שם המשימה *', { exact: true }).fill(taskName);
     await taskModal.getByRole('button', { name: 'שמור', exact: true }).click();
     await expect(taskModal).toBeHidden();
 
@@ -102,7 +101,7 @@ test.describe('core flow', () => {
 
     await page.getByRole('button', { name: 'עריכה', exact: true }).click();
     const clientModal = modal(page, 'עריכת לקוח');
-    const clientNameInput = field(clientModal, 'שם לקוח');
+    const clientNameInput = clientModal.getByLabel('שם לקוח *', { exact: true });
     await expect(clientNameInput).toHaveValue(client.name);
     const renamedClient = uniqueName('לקוח מעודכן');
     await clientNameInput.fill(renamedClient);
@@ -114,7 +113,7 @@ test.describe('core flow', () => {
     const projectRow = page.locator('.tab-content .list-item').filter({ hasText: project.name });
     await projectRow.getByTitle('ערוך').click();
     const projectModal = modal(page, 'עריכת פרויקט');
-    const projectNameInput = field(projectModal, 'שם הפרויקט');
+    const projectNameInput = projectModal.getByLabel('שם הפרויקט *', { exact: true });
     await expect(projectNameInput).toHaveValue(project.name);
     const renamedProject = uniqueName('פרויקט מעודכן');
     await projectNameInput.fill(renamedProject);

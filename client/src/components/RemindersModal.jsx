@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import useStore from '../store/useStore';
@@ -11,6 +11,7 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
   const stableInitialAssociation = useMemo(() => initialAssociation || EMPTY_ASSOCIATION, [initialAssociation?.type, initialAssociation?.id]);
   const prevIsOpenRef = useRef(false);
   useBodyScrollLock(isOpen);
+  const uid = useId();
   const { addReminder, updateReminder } = useStore();
   const [formData, setFormData] = useState({
     content: '',
@@ -298,8 +299,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-                <label className="form-label">תאריך ושעה</label>
+                <label className="form-label" htmlFor={`${uid}-due-date`}>תאריך ושעה</label>
                 <input
+                id={`${uid}-due-date`}
                 className="form-input"
                 type="datetime-local"
                 required
@@ -311,18 +313,19 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
             <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
                 <input
                     type="checkbox"
-                    id="is_recurring"
+                    id={`${uid}-is_recurring`}
                     checked={formData.is_recurring}
                     onChange={e => setFormData({...formData, is_recurring: e.target.checked})}
                     style={{ width: 'auto' }}
                 />
-                <label htmlFor="is_recurring" className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>תזכורת חוזרת</label>
+                <label htmlFor={`${uid}-is_recurring`} className="form-label" style={{ marginBottom: 0, cursor: 'pointer' }}>תזכורת חוזרת</label>
             </div>
 
             {formData.is_recurring && (
                 <div className="form-group">
-                <label className="form-label">תדירות חזרה</label>
+                <label className="form-label" htmlFor={`${uid}-recurrence-interval`}>תדירות חזרה</label>
                 <select
+                    id={`${uid}-recurrence-interval`}
                     className="form-input"
                     value={formData.recurrence_interval}
                     onChange={e => setFormData({...formData, recurrence_interval: e.target.value})}
@@ -336,8 +339,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
             )}
 
             <div className="form-group">
-                <label className="form-label">תוכן התזכורת</label>
+                <label className="form-label" htmlFor={`${uid}-content`}>תוכן התזכורת</label>
                 <textarea
+                id={`${uid}-content`}
                 className="form-input"
                 required
                 value={formData.content}
@@ -348,8 +352,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
             </div>
 
             <div className="form-group">
-                <label className="form-label">הערות</label>
+                <label className="form-label" htmlFor={`${uid}-notes`}>הערות</label>
                 <textarea
+                id={`${uid}-notes`}
                 className="form-input"
                 value={formData.notes}
                 onChange={e => setFormData({...formData, notes: e.target.value})}
@@ -361,8 +366,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
             {/* Lead association */}
             {leads.length > 0 && formData.association_type !== 'client' && formData.association_type !== 'project' && formData.association_type !== 'task' && (
               <div className="form-group">
-                <label className="form-label">שיוך לליד (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-lead`}>שיוך לליד (אופציונלי)</label>
                 <select
+                  id={`${uid}-lead`}
                   className="form-input"
                   value={formData.association_type === 'lead' ? formData.association_id : ''}
                   onChange={e => {
@@ -384,8 +390,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
             )}
 
             <div className="form-group">
-                <label className="form-label">לקוח (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-client`}>לקוח (אופציונלי)</label>
                 <select
+                id={`${uid}-client`}
                 className="form-input"
                 value={selectedClient}
                 onChange={e => handleClientChange(e.target.value)}
@@ -400,8 +407,8 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
 
             {/* Multi-select Projects */}
             <div className="form-group">
-              <label className="form-label">פרויקטים (אופציונלי)</label>
-              <div className="multi-select-dropdown" ref={projectsDropdownRef}>
+              <label className="form-label" id={`${uid}-projects-label`}>פרויקטים (אופציונלי)</label>
+              <div className="multi-select-dropdown" ref={projectsDropdownRef} role="group" aria-labelledby={`${uid}-projects-label`}>
                 <button
                   type="button"
                   className="form-input multi-select-trigger"
@@ -467,8 +474,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
 
             {selectedClient && (
                 <div className="form-group">
-                <label className="form-label">פרויקט ראשי (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-main-project`}>פרויקט ראשי (אופציונלי)</label>
                 <select
+                    id={`${uid}-main-project`}
                     className="form-input"
                     value={selectedProject}
                     onChange={e => handleProjectChange(e.target.value)}
@@ -484,8 +492,9 @@ const RemindersModal = ({ isOpen, onClose, reminder, initialAssociation }) => {
 
             {selectedProject && (
                 <div className="form-group">
-                <label className="form-label">משימה (אופציונלי)</label>
+                <label className="form-label" htmlFor={`${uid}-task`}>משימה (אופציונלי)</label>
                 <select
+                    id={`${uid}-task`}
                     className="form-input"
                     value={formData.association_type === 'task' ? formData.association_id : ''}
                     onChange={e => handleTaskChange(e.target.value)}
