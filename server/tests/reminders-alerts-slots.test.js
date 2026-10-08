@@ -100,12 +100,133 @@ describe('reminders', () => {
     }
   });
 
-  // Bug: monthly recurrence uses Date#setMonth, so the 31st rolls over into the month after next
-  it.fails('a monthly reminder on Jan 31 moves to the end of February, not into March', async () => {
+  it('a monthly reminder on Jan 31 moves to the end of February, not into March', async () => {
     const user = await createUser();
     const r = (await remind(user, { content: 'm', due_date: '2026-01-31T09:00:00.000Z', is_recurring: true, recurrence_interval: 'monthly' })).body;
     const res = await user.put(`/api/reminders/${r.id}`).send({ is_read: true });
     expect(res.body.due_date.slice(0, 7)).toBe('2026-02');
+    expect(res.body.due_date).toBe('2026-02-28T09:00:00.000Z');
+  });
+
+  it('a yearly reminder on Feb 29 moves to Feb 28 of the next year, not into March', async () => {
+    const user = await createUser();
+    const r = (await remind(user, { content: 'y', due_date: '2028-02-29T09:00:00.000Z', is_recurring: true, recurrence_interval: 'yearly' })).body;
+    const res = await user.put(`/api/reminders/${r.id}`).send({ is_read: true });
+    expect(res.body.due_date).toBe('2029-02-28T09:00:00.000Z');
+  });
+
+  describe('monthly / yearly reminders keep their day of the month', () => {
+    // Rescheduling works in the server's local time (as the UI does), so compare local calendar dates
+    const localDate = (iso) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const localHour = (iso) => new Date(iso).getHours();
+    const complete = async (user, id) => {
+      const res = await user.put(`/api/reminders/${id}`).send({ is_read: true });
+      expect(res.status).toBe(200);
+      return res.body;
+    };
+    const monthly = (user, due_date, extra = {}) =>
+      remind(user, { content: 'rent', due_date, is_recurring: true, recurrence_interval: 'monthly', ...extra });
+
+    it('a reminder on the 31st goes 31.1 -> 28.2 -> 31.3 -> 30.4 -> 31.5', async () => {
+      const user = await createUser();
+      const r = (await monthly(user, '2026-01-31T09:00:00.000Z')).body;
+      expect(r.recurrence_day).toBe(new Date('2026-01-31T09:00:00.000Z').getDate());
+      const seen = [];
+      let current = r;
+      for (let i = 0; i < 4; i++) {
+        current = await complete(user, r.id);
+        seen.push(localDate(current.due_date));
+        expect(localHour(current.due_date)).toBe(localHour(r.due_date));
+      }
+      expect(seen).toEqual(['2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31']);
+      expect(current.recurrence_day).toBe(31);
+    });
+
+    it('a yearly reminder on Feb 29 is on Feb 28 in common years and back on Feb 29 in the next leap year', async () => {
+      const user = await createUser();
+      const r = (await remind(user, { content: 'y', due_date: '2028-02-29T09:00:00.000Z', is_recurring: true, recurrence_interval: 'yearly' })).body;
+      const seen = [];
+      for (let i = 0; i < 4; i++) seen.push(localDate((await complete(user, r.id)).due_date));
+      expect(seen).toEqual(['2029-02-28', '2030-02-28', '2031-02-28', '2032-02-29']);
+    });
+
+    it('re-saving the form with the same date keeps the anchor; a new date or a non-monthly interval resets it', async () => {
+      const user = await createUser();
+      const r = (await monthly(user, '2026-01-31T09:00:00.000Z')).body;
+      const feb = await complete(user, r.id);
+      expect(localDate(feb.due_date)).toBe('2026-02-28');
+
+      // The edit form sends everything back, including the (clamped) due date
+      const resaved = await user.put(`/api/reminders/${r.id}`).send({
+        content: 'rent (edited)', due_date: feb.due_date, is_recurring: true, recurrence_interval: 'monthly'
+      });
+      expect(resaved.body).toMatchObject({ content: 'rent (edited)', recurrence_day: 31 });
+      expect(localDate((await complete(user, r.id)).due_date)).toBe('2026-03-31');
+
+      // Editing only the text keeps it too
+      expect((await user.put(`/api/reminders/${r.id}`).send({ content: 'rent again' })).body.recurrence_day).toBe(31);
+
+      // Picking a new date re-anchors on that day
+      const moved = await user.put(`/api/reminders/${r.id}`).send({ due_date: '2026-04-15T09:00:00.000Z' });
+      expect(moved.body.recurrence_day).toBe(new Date('2026-04-15T09:00:00.000Z').getDate());
+      expect(localDate((await complete(user, r.id)).due_date)).toBe('2026-05-15');
+
+      // Weekly reminders and non-recurring ones have no anchor
+      expect((await user.put(`/api/reminders/${r.id}`).send({ recurrence_interval: 'weekly' })).body.recurrence_day).toBeNull();
+      const once = (await remind(user, { content: 'once', due_date: '2026-01-31T09:00:00.000Z' })).body;
+      expect(once.recurrence_day).toBeNull();
+    });
+
+    it('a monthly reminder without an anchor (older data) anchors on its current day', async () => {
+      const user = await createUser();
+      const lead = (await user.post('/api/leads').send({ name: 'Anchor lead' })).body;
+      const created = await user.post(`/api/leads/${lead.id}/reminders`).send({
+        content: 'follow up', due_date: '2026-01-31T09:00:00.000Z', is_recurring: true, recurrence_interval: 'monthly'
+      });
+      expect(created.status).toBe(201);
+      // Lead reminders store their anchor now; clear it to simulate a row from before the column existed
+      user.db.prepare('UPDATE reminders SET recurrence_day = NULL WHERE id = ?').run(created.body.id);
+
+      const feb = await complete(user, created.body.id);
+      expect(localDate(feb.due_date)).toBe('2026-02-28');
+      expect(feb.recurrence_day).toBe(31);
+      expect(localDate((await complete(user, created.body.id)).due_date)).toBe('2026-03-31');
+    });
+
+    it('the startup backfill anchors existing monthly/yearly reminders once and leaves the rest alone', async () => {
+      const { backfillReminderRecurrenceDay } = await import('../database.js');
+      const user = await createUser();
+      const ids = {};
+      for (const [key, body] of Object.entries({
+        monthly: { content: 'm', due_date: '2026-01-31T09:00:00.000Z', is_recurring: true, recurrence_interval: 'monthly' },
+        yearly: { content: 'y', due_date: '2028-02-29T09:00:00.000Z', is_recurring: true, recurrence_interval: 'yearly' },
+        weekly: { content: 'w', due_date: '2026-01-31T09:00:00.000Z', is_recurring: true, recurrence_interval: 'weekly' },
+        once: { content: 'o', due_date: '2026-01-31T09:00:00.000Z' },
+        undated: { content: 'u', is_recurring: true, recurrence_interval: 'monthly' }
+      })) {
+        ids[key] = (await remind(user, body)).body.id;
+      }
+      // As they were before the column existed
+      const { db } = user;
+      const placeholders = Object.values(ids).map(() => '?').join(',');
+      db.prepare(`UPDATE reminders SET recurrence_day = NULL WHERE id IN (${placeholders})`).run(...Object.values(ids));
+      const anchors = () => Object.fromEntries(Object.entries(ids).map(([k, id]) => [k, db.prepare('SELECT recurrence_day FROM reminders WHERE id = ?').get(id).recurrence_day]));
+
+      expect(backfillReminderRecurrenceDay(db)).toBeGreaterThanOrEqual(2);
+      const expected = {
+        monthly: new Date('2026-01-31T09:00:00.000Z').getDate(),
+        yearly: new Date('2028-02-29T09:00:00.000Z').getDate(),
+        weekly: null,
+        once: null,
+        undated: null
+      };
+      expect(anchors()).toEqual(expected);
+      expect(backfillReminderRecurrenceDay(db)).toBe(0);
+      expect(anchors()).toEqual(expected);
+    });
   });
 
   it('a reminder whose associated record was deleted can still be edited with its full payload', async () => {
@@ -340,21 +461,34 @@ describe('planned slots', () => {
     expect(res.body).toHaveLength(365);
   });
 
-  // Bug: an end date before the start date creates nothing but still answers 201 with []
-  it.fails('rejects a series whose end date is before its start', async () => {
+  it('rejects a series whose end date is before its start', async () => {
     const user = await createUser();
     const { client } = await createClientProjectTask(user);
     const res = await slot(user, { client_id: client.id, date: '2026-06-10', duration: 60, is_recurring: true, recurrence_type: 'weekly', recurrence_end_date: '2026-06-01' });
     expect(res.status).toBe(400);
+    expect(res.body.error).toBeTruthy();
+    expect((await user.get('/api/planned-slots')).body).toEqual([]);
+
+    // Ending on the start day is a valid one-slot series
+    const sameDay = await slot(user, { client_id: client.id, date: '2026-06-10', duration: 60, is_recurring: true, recurrence_type: 'weekly', recurrence_end_date: '2026-06-10' });
+    expect(sameDay.status).toBe(201);
+    expect(sameDay.body.map(s => s.date)).toEqual(['2026-06-10']);
   });
 
-  // Bug: monthly series use Date#setMonth, so a series starting on the 31st skips/duplicates months
-  it.fails('a monthly series starting on the 31st has at most one slot per month', async () => {
+  it('a monthly series starting on the 31st has at most one slot per month', async () => {
     const user = await createUser();
     const { client } = await createClientProjectTask(user);
     const res = await slot(user, { client_id: client.id, date: '2026-01-31', duration: 60, is_recurring: true, recurrence_type: 'monthly', recurrence_end_date: '2026-06-30' });
     const months = res.body.map(s => s.date.slice(0, 7));
     expect(new Set(months).size).toBe(months.length);
+    // Clamped to the end of short months, back to the 31st whenever the month has one
+    expect(res.body.map(s => s.date)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30', '2026-05-31', '2026-06-30']);
+
+    const everyOther = await slot(user, { client_id: client.id, date: '2027-12-31', duration: 60, is_recurring: true, recurrence_type: 'monthly', recurrence_interval: 2, recurrence_end_date: '2028-06-30' });
+    expect(everyOther.body.map(s => s.date)).toEqual(['2027-12-31', '2028-02-29', '2028-04-30', '2028-06-30']);
+
+    const yearly = await slot(user, { client_id: client.id, date: '2028-02-29', duration: 60, is_recurring: true, recurrence_type: 'yearly', recurrence_end_date: '2032-03-01' });
+    expect(yearly.body.map(s => s.date)).toEqual(['2028-02-29', '2029-02-28', '2030-02-28', '2031-02-28', '2032-02-29']);
   });
 
   it('updates fields, deletes one slot or a whole series', async () => {

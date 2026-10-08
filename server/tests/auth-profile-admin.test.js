@@ -20,7 +20,7 @@ describe('auth - profile', () => {
     const email = `renamed-${Date.now()}@example.com`;
     const res = await user.put('/api/auth/profile').send({ name: 'New Name', email, default_hourly_rate: 400 });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: user.user.id, email, name: 'New Name', default_hourly_rate: 400 });
+    expect(res.body).toEqual({ id: user.user.id, email, name: 'New Name', default_hourly_rate: 400, has_password: 1 });
 
     const me = (await user.get('/api/auth/me')).body;
     expect(me).toMatchObject({ name: 'New Name', email, default_hourly_rate: 400 });
@@ -58,6 +58,51 @@ describe('auth - profile', () => {
     expect(ok.body.password).toBeUndefined();
     expect((await login(email, 'NewPass1!')).status).toBe(200);
     expect((await login(email, user.password)).status).toBe(401);
+  });
+
+  it('a password change signs out the other sessions and returns a fresh token for this one', async () => {
+    const { app } = await getApp();
+    const user = await createUser();
+    const otherSession = (await login(user.user.email, user.password)).body.token;
+    const me = (token) => request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
+    expect((await me(otherSession)).status).toBe(200);
+
+    const res = await user.put('/api/auth/profile').send({ password: 'NewPass1!', currentPassword: user.password });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: user.user.id, has_password: 1, token: expect.any(String) });
+
+    expect((await user.get('/api/auth/me')).status).toBe(401);
+    expect((await me(otherSession)).status).toBe(401);
+    const fresh = await me(res.body.token);
+    expect(fresh.status).toBe(200);
+    expect(fresh.body.id).toBe(user.user.id);
+    // Signing in again works as usual
+    expect((await me((await login(user.user.email, 'NewPass1!')).body.token)).status).toBe(200);
+  });
+
+  it('a profile update without a new password keeps every session and returns no token', async () => {
+    const user = await createUser();
+    const res = await user.put('/api/auth/profile').send({ name: 'Renamed' });
+    expect(res.body.token).toBeUndefined();
+    expect((await user.get('/api/auth/me')).status).toBe(200);
+  });
+
+  it('a passkey-only account sets its first password without a current one', async () => {
+    const user = await createUser();
+    user.db.prepare("UPDATE users SET password = '' WHERE id = ?").run(user.user.id);
+    expect((await user.get('/api/auth/me')).body.has_password).toBe(0);
+
+    const res = await user.put('/api/auth/profile').send({ password: 'First123!' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ has_password: 1, token: expect.any(String) });
+    expect((await login(user.user.email, 'First123!')).status).toBe(200);
+
+    // From now on the account has a password, so changing it needs the current one
+    const { app } = await getApp();
+    const again = await request(app).put('/api/auth/profile')
+      .set('Authorization', `Bearer ${res.body.token}`)
+      .send({ password: 'Second123!' });
+    expect(again.status).toBe(400);
   });
 
   it('the stored password is a hash, never the plain text', async () => {
@@ -108,52 +153,241 @@ describe('auth - account deletion', () => {
     expect(count('SELECT COUNT(*) AS n FROM active_timers WHERE user_id = ?', user.user.id)).toBe(0);
   });
 
-  // clients.user_id is ON DELETE CASCADE (database.js), so when a member deletes their account every
-  // client they created in a shared workspace - with all projects and everyone's entries - disappears
-  it.fails("a member deleting their account keeps the clients they created in someone else's workspace", async () => {
+  // clients.user_id is ON DELETE CASCADE (database.js), so deleting the user row alone would take every
+  // client they created in a shared workspace - with all projects and everyone's entries - with it
+  it("a member deleting their account keeps the clients they created in someone else's workspace", async () => {
     const owner = await createUser();
     const member = await addMember(owner, 'member');
     const client = (await member.post('/api/clients').send({ name: 'Team client' })).body;
+    const project = (await member.post('/api/projects').send({ client_id: client.id, name: 'Team project' })).body;
+    const task = (await member.post('/api/tasks').send({ project_id: project.id, name: 'Team task' })).body;
+    const memberEntry = await addEntry(member, { project_id: project.id, task_id: task.id, start: '2025-04-01T09:00:00.000Z', seconds: 1800 });
+    const ownerEntry = await addEntry(owner, { project_id: project.id, start: '2025-04-02T09:00:00.000Z', seconds: 600 });
+    await member.post('/api/timer/start').send({ project_id: project.id });
+    // ...and something in their own personal workspace
+    const personal = (await member.post('/api/clients', member.ownWorkspaceId).send({ name: 'Private client' })).body;
+
+    expect((await member.delete('/api/auth/account').send({ password: member.password })).status).toBe(200);
+
+    expect((await owner.get(`/api/clients/${client.id}`)).status).toBe(200);
+    expect((await owner.get(`/api/projects/${project.id}`)).status).toBe(200);
+    expect((await owner.get(`/api/tasks/${task.id}`)).status).toBe(200);
+    expect((await owner.get('/api/timer/entries')).body.map((e) => e.id).sort()).toEqual([memberEntry.id, ownerEntry.id].sort());
+
+    // The kept records now belong to the workspace owner; the account's personal state is gone
+    const { db } = owner;
+    const n = (sql, ...args) => db.prepare(sql).get(...args).n;
+    for (const table of ['clients', 'projects', 'tasks', 'time_entries', 'timer_intervals']) {
+      expect(n(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`, member.user.id), table).toBe(0);
+    }
+    expect(db.prepare('SELECT user_id FROM clients WHERE id = ?').get(client.id).user_id).toBe(owner.user.id);
+    expect(n('SELECT COUNT(*) AS n FROM active_timers WHERE user_id = ?', member.user.id)).toBe(0);
+    expect(n('SELECT COUNT(*) AS n FROM workspace_members WHERE user_id = ?', member.user.id)).toBe(0);
+    expect(n('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?', owner.workspaceId)).toBe(1);
+
+    // Their personal workspace went with the account, data included
+    expect(n('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?', member.ownWorkspaceId)).toBe(0);
+    expect(n('SELECT COUNT(*) AS n FROM clients WHERE id = ?', personal.id)).toBe(0);
+    expect(n('SELECT COUNT(*) AS n FROM clients WHERE workspace_id = ?', member.ownWorkspaceId)).toBe(0);
+  });
+
+  // integrations is UNIQUE(workspace_id, provider), so the workspace's connection moves to the owner
+  // even when the owner has the same provider connected in another workspace
+  it("keeps the workspace's integration a member connected, even if the owner has that provider elsewhere", async () => {
+    const owner = await createUser();
+    const member = await addMember(owner, 'member');
+    const other = (await owner.post('/api/workspaces').send({ name: 'Owner other' })).body;
+    const insert = owner.db.prepare(`INSERT INTO integrations (id, user_id, workspace_id, provider) VALUES (?, ?, ?, 'morning')`);
+    const ownersId = `int-${Date.now()}-a`;
+    const teamId = `int-${Date.now()}-b`;
+    insert.run(ownersId, owner.user.id, other.id);
+    insert.run(teamId, member.user.id, owner.workspaceId);
+    const client = (await member.post('/api/clients').send({ name: 'Still kept' })).body;
+
     expect((await member.delete('/api/auth/account').send({ password: member.password })).status).toBe(200);
     expect((await owner.get(`/api/clients/${client.id}`)).status).toBe(200);
+    const rows = owner.db.prepare('SELECT id, user_id, workspace_id FROM integrations WHERE id IN (?, ?) ORDER BY id').all(ownersId, teamId);
+    expect(rows).toEqual([
+      { id: ownersId, user_id: owner.user.id, workspace_id: other.id },
+      { id: teamId, user_id: owner.user.id, workspace_id: owner.workspaceId }
+    ]);
+    expect((await owner.get('/api/integrations')).body.map((i) => i.provider)).toEqual(['morning']);
+  });
+
+  describe('passkey-only accounts (no password stored)', () => {
+    // A passkey signup stores password '' (routes/passkeys.js) - same state as this
+    const passkeyOnly = async () => {
+      const user = await createUser({ email: `Passkey.User-${Date.now()}@Example.com` });
+      user.db.prepare("UPDATE users SET password = '' WHERE id = ?").run(user.user.id);
+      return user;
+    };
+
+    it('/me tells the client whether the account has a password', async () => {
+      const withPassword = await createUser();
+      expect((await withPassword.get('/api/auth/me')).body.has_password).toBe(1);
+      expect((await (await passkeyOnly()).get('/api/auth/me')).body.has_password).toBe(0);
+    });
+
+    it('confirm the deletion with their email (exact, case-insensitive) instead of a password', async () => {
+      const user = await passkeyOnly();
+      const { client } = await createClientProjectTask(user);
+      const email = user.user.email;
+
+      const missing = await user.delete('/api/auth/account').send({});
+      expect(missing.status).toBe(400);
+      expect(missing.body.error).toBeTruthy();
+      expect((await user.delete('/api/auth/account').send({ password: 'anything' })).status).toBe(400);
+      expect((await user.delete('/api/auth/account').send({ confirmEmail: 'someone-else@example.com' })).status).toBe(401);
+      expect((await user.delete('/api/auth/account').send({ confirmEmail: `${email}x` })).status).toBe(401);
+      expect((await user.delete('/api/auth/account').send({ confirmEmail: ` ${email}` })).status).toBe(401);
+      expect((await user.get('/api/auth/me')).status).toBe(200);
+
+      const res = await user.delete('/api/auth/account').send({ confirmEmail: email.toUpperCase() });
+      expect(res.status).toBe(200);
+      expect((await user.get('/api/auth/me')).status).toBe(401);
+      expect(user.db.prepare('SELECT COUNT(*) AS n FROM clients WHERE id = ?').get(client.id).n).toBe(0);
+      expect(user.db.prepare('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?').get(user.workspaceId).n).toBe(0);
+    });
+
+    it('a password account still needs its password - the email is not enough', async () => {
+      const user = await createUser();
+      const res = await user.delete('/api/auth/account').send({ confirmEmail: user.user.email });
+      expect(res.status).toBe(400);
+      expect((await user.get('/api/auth/me')).status).toBe(200);
+      expect((await user.delete('/api/auth/account').send({ confirmEmail: user.user.email, password: 'wrong' })).status).toBe(401);
+      expect((await user.get('/api/auth/me')).status).toBe(200);
+    });
+  });
+
+  it('an owner deleting their account hands a shared workspace to a remaining member, admins first', async () => {
+    const owner = await createUser({ name: 'Leaving owner' });
+    const { client, project } = await createClientProjectTask(owner);
+    const member = await addMember(owner, 'member', { name: 'Early member' });
+    const admin = await addMember(owner, 'admin', { name: 'Later admin' });
+    const memberClient = (await member.post('/api/clients').send({ name: 'Member client' })).body;
+    const invite = (await owner.post(`/api/workspaces/${owner.workspaceId}/invites`).send({})).body;
+    await owner.put('/api/addons/catalog').send({ isEnabled: true });
+    const ws = owner.workspaceId;
+
+    expect((await owner.delete('/api/auth/account').send({ password: owner.password })).status).toBe(200);
+
+    // The workspace survives (workspaces.created_by is ON DELETE CASCADE) with the admin as its owner
+    const { db } = admin;
+    expect(db.prepare('SELECT created_by FROM workspaces WHERE id = ?').get(ws)).toEqual({ created_by: admin.user.id });
+    expect((await admin.get('/api/workspaces/current')).body.role).toBe('owner');
+    expect((await member.get('/api/workspaces/current')).body.role).toBe('member');
+    expect((await admin.get(`/api/workspaces/${ws}/members`)).body.map((m) => m.name).sort()).toEqual(['Early member', 'Later admin']);
+
+    // All of the workspace's data is still there; the departed owner's records now belong to the new owner
+    expect((await admin.get('/api/clients')).body.map((c) => c.id).sort()).toEqual([client.id, memberClient.id].sort());
+    expect((await member.get(`/api/projects/${project.id}`)).status).toBe(200);
+    expect(db.prepare('SELECT user_id FROM clients WHERE id = ?').get(client.id).user_id).toBe(admin.user.id);
+    expect(db.prepare('SELECT user_id FROM clients WHERE id = ?').get(memberClient.id).user_id).toBe(member.user.id);
+    expect(db.prepare('SELECT created_by FROM workspace_invites WHERE id = ?').get(invite.id)).toEqual({ created_by: admin.user.id });
+    expect((await admin.get('/api/addons/enabled')).body).toContain('catalog');
+    expect((await member.get(`/api/workspaces/invite/${invite.token}`)).body.inviter_name).toBe('Later admin');
   });
 });
 
 describe('auth - forced password reset', () => {
-  it('validates the request', async () => {
+  const flag = async (user) => {
+    const admin = await adminClient();
+    expect((await admin.post(`/api/admin/users/${user.user.id}/force-password-reset`)).status).toBe(200);
+  };
+  const resetPassword = async (body) => {
     const { app } = await getApp();
+    return request(app).post('/api/auth/reset-password').send(body);
+  };
+
+  it('validates the request', async () => {
     const user = await createUser();
-    const post = (body) => request(app).post('/api/auth/reset-password').send(body);
-    expect((await post({ userId: user.user.id, oldPassword: user.password })).status).toBe(400);
-    expect((await post({ userId: user.user.id, oldPassword: user.password, newPassword: 'abc' })).status).toBe(400);
-    expect((await post({ userId: 'nope', oldPassword: 'x', newPassword: 'abcd1234' })).status).toBe(404);
-    expect((await post({ userId: user.user.id, oldPassword: 'wrong', newPassword: 'abcd1234' })).status).toBe(401);
-    // Not flagged for a reset
-    expect((await post({ userId: user.user.id, oldPassword: user.password, newPassword: 'abcd1234' })).status).toBe(400);
-    expect((await login(user.user.email, user.password)).status).toBe(200);
+    await flag(user);
+    const { resetToken } = (await login(user.user.email, user.password)).body;
+
+    expect((await resetPassword({ resetToken })).status).toBe(400);
+    expect((await resetPassword({ newPassword: 'abcd1234' })).status).toBe(400);
+    expect((await resetPassword({ resetToken, newPassword: 'abc' })).status).toBe(400);
+    expect((await resetPassword({ resetToken: 'not-a-token', newPassword: 'abcd1234' })).status).toBe(401);
+    // A normal session token is not a reset token
+    const other = await createUser();
+    expect((await resetPassword({ resetToken: other.token, newPassword: 'abcd1234' })).status).toBe(401);
+    // The old password again doesn't count as a new one
+    expect((await resetPassword({ resetToken, newPassword: user.password })).status).toBe(400);
+    // Nothing changed: the user still has to reset
+    expect((await login(user.user.email, user.password)).body.requiresPasswordReset).toBe(true);
   });
 
-  it('admin forces a reset, login flags it, and the reset clears it', async () => {
+  it('admin forces a reset, login gets a reset token instead of a session, and the reset signs in', async () => {
     const { app } = await getApp();
-    const admin = await adminClient();
     const user = await createUser();
-    expect((await admin.post(`/api/admin/users/${user.user.id}/force-password-reset`)).status).toBe(200);
+    await createUser(); // another user's workspace must not leak into the response
+    await flag(user);
 
     const flagged = await login(user.user.email, user.password);
     expect(flagged.status).toBe(200);
-    expect(flagged.body.requiresPasswordReset).toBe(true);
+    expect(flagged.body).toEqual({ requiresPasswordReset: true, resetToken: expect.any(String) });
 
-    const reset = await request(app)
-      .post('/api/auth/reset-password')
-      .send({ userId: user.user.id, oldPassword: user.password, newPassword: 'Fresh123!' });
+    // The reset token is not a session
+    const asSession = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${flagged.body.resetToken}`);
+    expect(asSession.status).toBe(401);
+
+    const reset = await resetPassword({ resetToken: flagged.body.resetToken, newPassword: 'Fresh123!' });
     expect(reset.status).toBe(200);
-    expect(reset.body.token).toBeTruthy();
-    expect(reset.body.currentWorkspace.id).toBe(user.workspaceId);
+    expect(reset.body).toMatchObject({
+      requiresPasswordReset: false,
+      user: { id: user.user.id, email: user.user.email, has_password: 1, is_admin: 0 },
+      currentWorkspace: { id: user.workspaceId, role: 'owner', member_count: 1 }
+    });
+    expect(reset.body.workspaces.map((w) => w.id)).toEqual([user.workspaceId]);
+    const me = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${reset.body.token}`);
+    expect(me.status).toBe(200);
+    expect(me.body.id).toBe(user.user.id);
+
+    // Single use: the flag is gone, so the same reset token can't set another password
+    expect((await resetPassword({ resetToken: flagged.body.resetToken, newPassword: 'Again123!' })).status).toBe(400);
 
     const after = await login(user.user.email, 'Fresh123!');
     expect(after.status).toBe(200);
     expect(after.body.requiresPasswordReset).toBe(false);
+    expect(after.body.token).toBeTruthy();
     expect((await login(user.user.email, user.password)).status).toBe(401);
+  });
+
+  it('flagging a user ends their existing sessions for good', async () => {
+    const user = await createUser();
+    expect((await user.get('/api/auth/me')).status).toBe(200);
+
+    await flag(user);
+    const blocked = await user.get('/api/clients');
+    expect(blocked.status).toBe(401);
+    expect(blocked.body.error).toBe('אנא התחבר למערכת');
+    expect((await user.get('/api/auth/me')).status).toBe(401);
+
+    const { resetToken } = (await login(user.user.email, user.password)).body;
+    const reset = await resetPassword({ resetToken, newPassword: 'Fresh123!' });
+    // Sessions from before the flag stay revoked after the reset; the new one works
+    expect((await user.get('/api/auth/me')).status).toBe(401);
+    const { app } = await getApp();
+    expect((await request(app).get('/api/auth/me').set('Authorization', `Bearer ${reset.body.token}`)).status).toBe(200);
+  });
+
+  it('the admin cannot impersonate a flagged user', async () => {
+    const admin = await adminClient();
+    const user = await createUser();
+    await flag(user);
+    const res = await admin.post(`/api/admin/impersonate/${user.user.id}`);
+    expect(res.status).toBe(409);
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it('a suspended user cannot use a reset token', async () => {
+    const admin = await adminClient();
+    const user = await createUser();
+    await flag(user);
+    const { resetToken } = (await login(user.user.email, user.password)).body;
+    await admin.post(`/api/admin/users/${user.user.id}/toggle-active`);
+
+    expect((await resetPassword({ resetToken, newPassword: 'Fresh123!' })).status).toBe(403);
   });
 });
 
@@ -246,6 +480,17 @@ describe('admin - actions', () => {
     expect((await login(user.user.email, user.password)).status).toBe(401);
   });
 
+  it('a password set by the admin signs the user out of existing sessions', async () => {
+    const admin = await adminClient();
+    const user = await createUser();
+    expect((await user.get('/api/auth/me')).status).toBe(200);
+    // iatMs is in milliseconds; make sure the revocation time is strictly later than the token
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect((await admin.post(`/api/admin/users/${user.user.id}/set-password`).send({ password: 'byAdmin2' })).status).toBe(200);
+    expect((await user.get('/api/auth/me')).status).toBe(401);
+    expect((await login(user.user.email, 'byAdmin2')).status).toBe(200);
+  });
+
   it('suspends and re-activates an account', async () => {
     const admin = await adminClient();
     const user = await createUser();
@@ -275,5 +520,16 @@ describe('admin - actions', () => {
     expect(user.db.prepare('SELECT COUNT(*) AS n FROM clients WHERE id = ?').get(client.id).n).toBe(0);
     expect(user.db.prepare('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?').get(user.workspaceId).n).toBe(0);
     expect((await admin.get('/api/admin/users')).body.find((u) => u.id === user.user.id)).toBeUndefined();
+  });
+
+  it("deleting a user keeps what they created in someone else's workspace", async () => {
+    const admin = await adminClient();
+    const owner = await createUser();
+    const member = await addMember(owner, 'member');
+    const client = (await member.post('/api/clients').send({ name: 'Kept client' })).body;
+    expect((await admin.delete(`/api/admin/users/${member.user.id}`)).status).toBe(200);
+    expect((await owner.get(`/api/clients/${client.id}`)).status).toBe(200);
+    expect(owner.db.prepare('SELECT user_id FROM clients WHERE id = ?').get(client.id).user_id).toBe(owner.user.id);
+    expect(owner.db.prepare('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?').get(member.ownWorkspaceId).n).toBe(0);
   });
 });

@@ -7,6 +7,9 @@ const router = Router();
 // Helper to get db
 const getDb = (req) => req.app.locals.db;
 
+// Global sources (workspace_id NULL) show up in every workspace, so only a system admin manages them
+const isSystemAdmin = (req) => getDb(req).prepare('SELECT is_admin FROM users WHERE id = ?').get(req.userId)?.is_admin === 1;
+
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 router.use(workspaceMiddleware);
@@ -84,6 +87,10 @@ router.get('/stats', async (req, res) => {
 router.post('/:id/assign-to-workspace', async (req, res) => {
     try {
         const db = getDb(req);
+        if (!isSystemAdmin(req)) {
+            return res.status(403).json({ error: 'רק מנהל מערכת יכול לשייך מקור גלובלי' });
+        }
+
         const source = db.prepare('SELECT * FROM client_sources WHERE id = ?').get(req.params.id);
         
         if (!source) {
@@ -116,6 +123,10 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'שם מקור נדרש' });
         }
         
+        if (is_global && !isSystemAdmin(req)) {
+            return res.status(403).json({ error: 'רק מנהל מערכת יכול ליצור מקור גלובלי' });
+        }
+
         // Determine workspace_id: NULL for global sources, current workspace otherwise
         const workspaceId = is_global ? null : req.workspaceId;
         

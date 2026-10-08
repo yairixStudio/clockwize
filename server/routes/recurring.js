@@ -7,6 +7,24 @@ const router = express.Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// Local calendar day as YYYY-MM-DD - toISOString() is UTC, so local midnight east of UTC
+// (e.g. Israel) would come out as the previous day
+const toLocalDateString = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Next local calendar day a monthly template falls due, today included. day_of_month 29-31 is
+// clamped to the last day of a short month (31 -> Feb 28/29, Apr 30) instead of overflowing.
+const nextDueDate = (dayOfMonth, now) => {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueIn = (monthOffset) => {
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + monthOffset + 1, 0).getDate();
+    return new Date(today.getFullYear(), today.getMonth() + monthOffset, Math.min(dayOfMonth, lastDay));
+  };
+  const due = dueIn(0) >= today ? dueIn(0) : dueIn(1);
+  // Whole calendar days between local midnights (rounded: a DST day is 23 or 25 hours long)
+  return { due, daysUntilDue: Math.round((due - today) / 86400000) };
+};
+
 // Referenced client / project must belong to the workspace (otherwise their names leak through the joins)
 const findForeignReference = (db, workspaceId, { client_id, project_id }) => {
   if (client_id && !db.prepare('SELECT id FROM clients WHERE id = ? AND workspace_id = ?').get(client_id, workspaceId)) {
@@ -300,7 +318,6 @@ router.get('/upcoming/reminders', authMiddleware, workspaceMiddleware, (req, res
     const { days = 7 } = req.query;
 
     const today = new Date();
-    const currentDay = today.getDate();
     const daysAhead = parseInt(days);
 
     // Get active recurring payments that are due within the specified days
@@ -319,25 +336,14 @@ router.get('/upcoming/reminders', authMiddleware, workspaceMiddleware, (req, res
     `).all(req.workspaceId);
 
     // Filter to those due within the next X days
-    const upcoming = recurringPayments.filter(rp => {
-      const dayOfMonth = rp.day_of_month;
-      const daysUntilDue = dayOfMonth >= currentDay 
-        ? dayOfMonth - currentDay 
-        : (new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - currentDay) + dayOfMonth;
-      
-      return daysUntilDue <= daysAhead;
-    }).map(rp => {
-      const dayOfMonth = rp.day_of_month;
-      const daysUntilDue = dayOfMonth >= currentDay 
-        ? dayOfMonth - currentDay 
-        : (new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - currentDay) + dayOfMonth;
-      
+    const upcoming = recurringPayments.map(rp => {
+      const { due, daysUntilDue } = nextDueDate(rp.day_of_month, today);
       return {
         ...rp,
         days_until_due: daysUntilDue,
-        due_date: new Date(today.getFullYear(), today.getMonth() + (dayOfMonth >= currentDay ? 0 : 1), dayOfMonth).toISOString()
+        due_date: toLocalDateString(due)
       };
-    });
+    }).filter(rp => rp.days_until_due <= daysAhead);
 
     res.json(upcoming);
   } catch (error) {

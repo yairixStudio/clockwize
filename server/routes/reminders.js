@@ -1,6 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
+import { ANCHORED_INTERVALS, recurrenceDayFor } from '../utils/recurrence.js';
 
 const router = express.Router();
 
@@ -9,6 +10,19 @@ const getDb = (req) => req.app.locals.db;
 
 router.use(authMiddleware);
 router.use(workspaceMiddleware);
+
+// Add whole months, landing on `anchorDay` or on the last day of a shorter month (Jan 31 + 1 month =
+// Feb 28/29, not Mar 3 as Date#setMonth would give). Local time, like the rest of the rescheduling.
+const addMonthsClamped = (date, months, anchorDay = date.getDate()) => {
+  const next = new Date(date);
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(anchorDay, lastDay));
+  return next;
+};
+
+const sameMoment = (a, b) => !!a && !!b && new Date(a).getTime() === new Date(b).getTime();
 
 // The record a reminder points at (and every linked project) must belong to the workspace -
 // GET joins their names into the response
@@ -141,10 +155,11 @@ router.post('/', (req, res) => {
 
     db.prepare(`
       INSERT INTO reminders (
-        id, user_id, workspace_id, content, notes, due_date, association_type, association_id, is_recurring, recurrence_interval
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, workspace_id, content, notes, due_date, association_type, association_id, is_recurring, recurrence_interval, recurrence_day
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, req.userId, req.workspaceId, content, notes || null, due_date || null, association_type, cleanAssociationId, is_recurring ? 1 : 0, recurrence_interval || null
+      id, req.userId, req.workspaceId, content, notes || null, due_date || null, association_type, cleanAssociationId, is_recurring ? 1 : 0, recurrence_interval || null,
+      recurrenceDayFor({ is_recurring, recurrence_interval, due_date })
     );
 
     // Create project associations if project_ids provided
@@ -205,6 +220,10 @@ router.put('/:id', (req, res) => {
     // Handle recurring logic when marking as read (is_read = 1)
     if (updates.is_read === true && reminder.is_recurring && reminder.recurrence_interval) {
         let nextDate = new Date(reminder.due_date || new Date());
+        // Reminders from before the anchor existed (or created elsewhere) anchor on their current day
+        const anchorDay = ANCHORED_INTERVALS.includes(reminder.recurrence_interval)
+          ? (reminder.recurrence_day || nextDate.getDate())
+          : null;
 
         switch (reminder.recurrence_interval) {
             case 'daily':
@@ -214,18 +233,18 @@ router.put('/:id', (req, res) => {
                 nextDate.setDate(nextDate.getDate() + 7);
                 break;
             case 'monthly':
-                nextDate.setMonth(nextDate.getMonth() + 1);
+                nextDate = addMonthsClamped(nextDate, 1, anchorDay);
                 break;
             case 'yearly':
-                nextDate.setFullYear(nextDate.getFullYear() + 1);
+                nextDate = addMonthsClamped(nextDate, 12, anchorDay);
                 break;
         }
 
         db.prepare(`
             UPDATE reminders
-            SET due_date = ?, updated_at = CURRENT_TIMESTAMP
+            SET due_date = ?, recurrence_day = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        `).run(nextDate.toISOString(), id);
+        `).run(nextDate.toISOString(), anchorDay, id);
 
         const updated = db.prepare('SELECT * FROM reminders WHERE id = ?').get(id);
         updated.project_associations = db.prepare(`
@@ -266,6 +285,22 @@ router.put('/:id', (req, res) => {
         values.push(key === 'is_recurring' || key === 'is_read' || key === 'is_archived' ? (updates[key] ? 1 : 0) : updates[key]);
       }
     });
+
+    // The anchor day follows the schedule: a new due date (or turning monthly/yearly on) re-anchors,
+    // while re-sending the unchanged date with the rest of the form keeps it (28.2 of a 31st reminder)
+    if (['due_date', 'is_recurring', 'recurrence_interval'].some(key => updates[key] !== undefined)) {
+      const next = {
+        due_date: updates.due_date !== undefined ? updates.due_date : reminder.due_date,
+        is_recurring: updates.is_recurring !== undefined ? !!updates.is_recurring : !!reminder.is_recurring,
+        recurrence_interval: updates.recurrence_interval !== undefined ? updates.recurrence_interval : reminder.recurrence_interval
+      };
+      let recurrenceDay = recurrenceDayFor(next);
+      if (recurrenceDay !== null && reminder.recurrence_day && sameMoment(next.due_date, reminder.due_date)) {
+        recurrenceDay = reminder.recurrence_day;
+      }
+      sets.push('recurrence_day = ?');
+      values.push(recurrenceDay);
+    }
 
     if (sets.length > 0) {
       sets.push('updated_at = CURRENT_TIMESTAMP');

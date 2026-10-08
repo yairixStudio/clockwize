@@ -135,6 +135,135 @@ class Database {
   }
 }
 
+// user_addons table definition. Addons are switched on and off per workspace (every route reads and
+// writes by workspace_id + addon_id), so that pair is the unique key.
+function userAddonsTableSql(name) {
+  return `CREATE TABLE ${name} (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      workspace_id TEXT,
+      addon_id TEXT NOT NULL,
+      is_enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(workspace_id, addon_id)
+    )`;
+}
+
+const USER_ADDONS_COLUMNS = ['id', 'user_id', 'workspace_id', 'addon_id', 'is_enabled', 'created_at', 'updated_at'];
+
+// integrations table definition. A connection (e.g. Morning) belongs to the workspace - every route
+// reads, writes and disconnects by workspace_id + provider; user_id is who connected it.
+function integrationsTableSql(name) {
+  return `CREATE TABLE ${name} (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      workspace_id TEXT,
+      provider TEXT NOT NULL,
+      api_key TEXT,
+      api_secret TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      expires_at DATETIME,
+      settings TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(workspace_id, provider)
+    )`;
+}
+
+const INTEGRATIONS_COLUMNS = [
+  'id', 'user_id', 'workspace_id', 'provider', 'api_key', 'api_secret', 'access_token', 'refresh_token',
+  'expires_at', 'settings', 'is_active', 'created_at', 'updated_at'
+];
+
+// Rebuilds `table` so its unique key is `newKey` instead of `oldKey`, keeping every row:
+// CREATE <table>_new -> INSERT SELECT -> check the row count -> DROP old -> RENAME, all in one
+// transaction. Runs only while the old key is there, so it is safe on every start. Any failure
+// (e.g. rows that would break the new key) rolls back and leaves the old table exactly as it was.
+function rebuildWithUniqueKey(db, { table, oldKey, newKey, tableSql, knownColumns }) {
+  const uniqueKeys = db.prepare(`SELECT name FROM pragma_index_list(?) WHERE "unique" = 1`).all(table)
+    .map(index => db.prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno').all(index.name).map(col => col.name));
+  const hasOldKey = uniqueKeys.some(cols => cols.length === oldKey.length && cols.every((col, i) => col === oldKey[i]));
+  if (!hasOldKey) return false;
+
+  const label = `${table} unique key`;
+  const columns = db.prepare('SELECT name FROM pragma_table_info(?)').all(table).map(col => col.name);
+  const unexpected = columns.filter(col => !knownColumns.includes(col));
+  if (!newKey.every(col => columns.includes(col)) || unexpected.length > 0) {
+    console.error(`Migration skipped (${label}): unexpected columns [${columns.join(', ')}] - table left as is`);
+    return false;
+  }
+
+  const columnList = columns.join(', ');
+  const before = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+  // Kept synchronous on purpose: the file is written on a later tick (save() -> setImmediate),
+  // and writing it (export()) would end an open transaction
+  try {
+    db.exec('BEGIN');
+    db.exec(`DROP TABLE IF EXISTS ${table}_new`);
+    db.exec(tableSql(`${table}_new`));
+    db.exec(`INSERT INTO ${table}_new (${columnList}) SELECT ${columnList} FROM ${table}`);
+    const copied = db.prepare(`SELECT COUNT(*) AS n FROM ${table}_new`).get().n;
+    if (copied !== before) throw new Error(`row count mismatch: ${before} -> ${copied}`);
+    db.exec(`DROP TABLE ${table}`);
+    db.exec(`ALTER TABLE ${table}_new RENAME TO ${table}`);
+    db.exec('COMMIT');
+    console.log(`✅ Migrated ${table} to UNIQUE(${newKey.join(', ')}) (${copied} rows kept)`);
+    return true;
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch { /* nothing to roll back */ }
+    console.error(`Migration error (${label}) - old table kept:`, e.message);
+    return false;
+  }
+}
+
+// Older databases have user_addons with UNIQUE(user_id, addon_id): a member of two workspaces got a
+// 500 the first time they toggled an addon in the second one
+export function migrateUserAddonsUniqueKey(db) {
+  return rebuildWithUniqueKey(db, {
+    table: 'user_addons',
+    oldKey: ['user_id', 'addon_id'],
+    newKey: ['workspace_id', 'addon_id'],
+    tableSql: userAddonsTableSql,
+    knownColumns: USER_ADDONS_COLUMNS
+  });
+}
+
+// Older databases have integrations with UNIQUE(user_id, provider): connecting Morning in a second
+// workspace failed for a user who had already connected it in another one
+export function migrateIntegrationsUniqueKey(db) {
+  return rebuildWithUniqueKey(db, {
+    table: 'integrations',
+    oldKey: ['user_id', 'provider'],
+    newKey: ['workspace_id', 'provider'],
+    tableSql: integrationsTableSql,
+    knownColumns: INTEGRATIONS_COLUMNS
+  });
+}
+
+// Monthly/yearly reminders remember the day of the month they were set for, so a reminder on the 31st
+// goes 31.1 -> 28.2 -> 31.3 instead of drifting to the 28th. The day is read in local time, exactly
+// like routes/reminders.js reschedules. Fills only reminders that have no anchor yet (idempotent).
+export function backfillReminderRecurrenceDay(db) {
+  const unanchored = db.prepare(`
+    SELECT id, due_date FROM reminders
+    WHERE recurrence_day IS NULL AND is_recurring = 1 AND recurrence_interval IN ('monthly', 'yearly') AND due_date IS NOT NULL
+  `).all();
+  let filled = 0;
+  for (const reminder of unanchored) {
+    const due = new Date(reminder.due_date);
+    if (Number.isNaN(due.getTime())) continue;
+    db.prepare('UPDATE reminders SET recurrence_day = ? WHERE id = ? AND recurrence_day IS NULL').run(due.getDate(), reminder.id);
+    filled += 1;
+  }
+  if (filled > 0) console.log(`✅ Anchored ${filled} monthly/yearly reminders to their day of the month`);
+  return filled;
+}
+
 async function initDatabase() {
   const SQL = await initSqlJs();
 
@@ -344,23 +473,8 @@ async function initDatabase() {
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
     );
 
-    -- Integrations table
-    CREATE TABLE IF NOT EXISTS integrations (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      api_key TEXT,
-      api_secret TEXT,
-      access_token TEXT,
-      refresh_token TEXT,
-      expires_at DATETIME,
-      settings TEXT,
-      is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(user_id, provider)
-    );
+    -- Integrations table (one connection per provider per workspace; user_id = who connected it)
+    ${integrationsTableSql('IF NOT EXISTS integrations')};
 
     -- Payments table
     CREATE TABLE IF NOT EXISTS payments (
@@ -422,17 +536,8 @@ async function initDatabase() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    -- User Addons table (stores which addons are enabled/disabled per user)
-    CREATE TABLE IF NOT EXISTS user_addons (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      addon_id TEXT NOT NULL,
-      is_enabled INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(user_id, addon_id)
-    );
+    -- User Addons table (which addons are enabled/disabled per workspace; user_id = who set it)
+    ${userAddonsTableSql('IF NOT EXISTS user_addons')};
 
     -- Comment read status table (tracks when user last viewed comments for each context)
     CREATE TABLE IF NOT EXISTS comment_read_status (
@@ -544,6 +649,9 @@ async function initDatabase() {
 
   // Migration: Add force_password_reset column to users
   db.addColumn('users', 'force_password_reset', 'INTEGER DEFAULT 0');
+  // Session tokens issued before this time (ms since epoch) are refused - set when the admin forces
+  // a password reset, so sessions from before it never come back (middleware/auth.js)
+  db.addColumn('users', 'sessions_valid_after', 'INTEGER');
 
   // Migration: Add status column to clients
   db.addColumn('clients', 'status', "TEXT DEFAULT 'active'");
@@ -590,6 +698,14 @@ async function initDatabase() {
   // Migration: Add is_archived column to reminders table (separate from is_read/handled)
   db.addColumn('reminders', 'is_archived', 'INTEGER DEFAULT 0');
 
+  // Migration: Add recurrence_day to reminders (the day of the month a monthly/yearly reminder keeps)
+  db.addColumn('reminders', 'recurrence_day', 'INTEGER');
+  try {
+    backfillReminderRecurrenceDay(db);
+  } catch (e) {
+    console.error('Migration error (reminders recurrence_day):', e.message);
+  }
+
   // Migration: Add new subtask fields (due_date, description, priority)
   db.addColumn('subtasks', 'due_date', 'TEXT');
   db.addColumn('subtasks', 'description', 'TEXT');
@@ -610,6 +726,10 @@ async function initDatabase() {
   for (const table of tablesNeedingWorkspaceId) {
     db.addColumn(table, 'workspace_id', 'TEXT');
   }
+
+  // Migration: user_addons and integrations are keyed per workspace, not per user (need workspace_id, added above)
+  migrateUserAddonsUniqueKey(db);
+  migrateIntegrationsUniqueKey(db);
 
   // Migration: Create personal workspace for existing users who don't have one
   try {
@@ -1183,6 +1303,9 @@ async function initDatabase() {
   console.log('✅ Database initialized');
   return db;
 }
+
+// The wrapper class is exported so migrations can be tested against a throwaway database
+export { Database };
 
 // Export a promise that resolves to the database
 export const dbPromise = initDatabase();

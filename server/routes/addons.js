@@ -1,6 +1,6 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
+import { authMiddleware, workspaceMiddleware, canManageWorkspace } from '../middleware/auth.js';
 import { encrypt, decryptDetailed } from '../utils/crypto.js';
 
 const router = express.Router();
@@ -10,6 +10,14 @@ const SENSITIVE_SETTINGS = ['openai_api_key', 'api_key', 'api_secret', 'password
 
 // Helper to get db
 const getDb = (req) => req.app.locals.db;
+
+// הפעלה/כיבוי של תוספים והגדרותיהם (כולל מפתחות API) חלים על כל ה-workspace - רק בעלים או מנהל
+const requireAddonManager = (req, res, next) => {
+  if (!canManageWorkspace(req)) {
+    return res.status(403).json({ error: 'רק הבעלים או מנהל ה-workspace יכולים לשנות תוספים' });
+  }
+  next();
+};
 
 // הגדרת התוספים הזמינים במערכת
 // כל תוסף חדש צריך להתווסף כאן
@@ -142,7 +150,7 @@ router.get('/enabled', authMiddleware, workspaceMiddleware, (req, res) => {
 });
 
 // עדכון מצב תוסף (הפעלה/כיבוי)
-router.put('/:addonId', authMiddleware, workspaceMiddleware, (req, res) => {
+router.put('/:addonId', authMiddleware, workspaceMiddleware, requireAddonManager, (req, res) => {
   try {
     const db = getDb(req);
     const { addonId } = req.params;
@@ -183,7 +191,7 @@ router.put('/:addonId', authMiddleware, workspaceMiddleware, (req, res) => {
 });
 
 // עדכון מרובה של תוספים
-router.put('/', authMiddleware, workspaceMiddleware, (req, res) => {
+router.put('/', authMiddleware, workspaceMiddleware, requireAddonManager, (req, res) => {
   try {
     const db = getDb(req);
     const { addons } = req.body; // מערך של { id, isEnabled }
@@ -287,6 +295,8 @@ router.get('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res)
     `).all(req.workspaceId, addonId);
     
     // המרה לאובייקט עם פענוח ומיסוך של ערכים רגישים
+    // חבר צוות רגיל רואה רק אם ערך רגיש מוגדר - גם הגרסה הממוסכת חושפת חלק מהמפתח
+    const canSeeMasked = canManageWorkspace(req);
     const result = {};
     for (const setting of settings) {
       const isSensitive = SENSITIVE_SETTINGS.some(s => setting.setting_key.includes(s));
@@ -295,7 +305,7 @@ router.get('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res)
         // פענוח הערך המוצפן
         const decrypted = decryptSetting(db, req.workspaceId, req.userId, addonId, setting.setting_key, setting.setting_value);
         // מיסוך לתצוגה
-        result[setting.setting_key] = maskSensitiveValue(decrypted);
+        if (canSeeMasked) result[setting.setting_key] = maskSensitiveValue(decrypted);
         // שליחת דגל שיש ערך מוגדר
         result[`${setting.setting_key}_configured`] = !!decrypted;
       } else {
@@ -311,7 +321,7 @@ router.get('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res)
 });
 
 // עדכון הגדרות תוסף
-router.put('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res) => {
+router.put('/:addonId/settings', authMiddleware, workspaceMiddleware, requireAddonManager, (req, res) => {
   try {
     const db = getDb(req);
     const { addonId } = req.params;

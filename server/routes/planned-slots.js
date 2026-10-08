@@ -14,6 +14,18 @@ function formatDate(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Helper: add whole months, clamping to the last day of the target month while keeping the
+// original day when the month has it (Jan 31 -> Feb 28/29 -> Mar 31; Date#setMonth would overflow)
+function addMonthsClamped(date, months) {
+  const day = date.getDate();
+  const d = new Date(date);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
 // Helper: generate recurrence dates until endDate
 function generateRecurrenceDates(startDate, recurrenceType, interval, endDate) {
   const dates = [];
@@ -22,7 +34,7 @@ function generateRecurrenceDates(startDate, recurrenceType, interval, endDate) {
   const MAX_OCCURRENCES = 365; // safety limit
 
   for (let i = 0; i < MAX_OCCURRENCES; i++) {
-    const d = new Date(start);
+    let d = new Date(start);
 
     switch (recurrenceType) {
       case 'daily':
@@ -35,10 +47,11 @@ function generateRecurrenceDates(startDate, recurrenceType, interval, endDate) {
         d.setDate(start.getDate() + (i * 14 * interval));
         break;
       case 'monthly':
-        d.setMonth(start.getMonth() + (i * interval));
+        // Always counted from the start, so the original day comes back after a short month
+        d = addMonthsClamped(start, i * interval);
         break;
       case 'yearly':
-        d.setFullYear(start.getFullYear() + (i * interval));
+        d = addMonthsClamped(start, i * interval * 12);
         break;
       default:
         d.setDate(start.getDate() + (i * 7));
@@ -107,6 +120,10 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
     if (is_recurring && recurrence_type) {
       if (!recurrence_end_date) {
         return res.status(400).json({ error: 'נדרש תאריך סיום לאירוע חוזר' });
+      }
+      // Both are YYYY-MM-DD, so string order is date order; the same day is a one-slot series
+      if (String(recurrence_end_date).slice(0, 10) < String(date).slice(0, 10)) {
+        return res.status(400).json({ error: 'תאריך הסיום של אירוע חוזר לא יכול להיות לפני תאריך ההתחלה' });
       }
 
       // Generate multiple slots with shared group ID

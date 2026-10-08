@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { getApp, createUser, createClientProjectTask } from './helpers.js';
 import { addEntry, addMember, backdateTimer } from './helpers-core.js';
@@ -375,16 +377,57 @@ describe('workspaces - CRUD', () => {
     expect((await user.get('/api/workspaces')).body.map((w) => w.id)).toEqual([user.workspaceId]);
   });
 
-  // workspace_id on clients/projects/... is a plain column without a foreign key, so the comment
-  // "CASCADE will handle ... data" in DELETE /workspaces/:id is wrong and the rows are orphaned
-  it.fails('deleting a workspace also deletes its clients, projects and entries', async () => {
+  // workspace_id on clients/projects/... is a plain column without a foreign key, so deleting only the
+  // workspaces row (relying on CASCADE) used to leave all of its data orphaned
+  it('deleting a workspace also deletes its clients, projects and entries', async () => {
     const user = await createUser();
+    const keep = await createClientProjectTask(user);
     const second = (await user.post('/api/workspaces').send({ name: 'Doomed' })).body;
-    const c = (await user.post('/api/clients', second.id).send({ name: 'Doomed client' })).body;
-    await user.post('/api/projects', second.id).send({ client_id: c.id, name: 'Doomed project' });
-    expect((await user.delete(`/api/workspaces/${second.id}`, second.id)).status).toBe(200);
-    expect(user.db.prepare('SELECT COUNT(*) AS n FROM clients WHERE workspace_id = ?').get(second.id).n).toBe(0);
-    expect(user.db.prepare('SELECT COUNT(*) AS n FROM projects WHERE workspace_id = ?').get(second.id).n).toBe(0);
+    const ws = second.id;
+    const c = (await user.post('/api/clients', ws).send({ name: 'Doomed client' })).body;
+    const p = (await user.post('/api/projects', ws).send({ client_id: c.id, name: 'Doomed project' })).body;
+    const t = (await user.post('/api/tasks', ws).send({ project_id: p.id, name: 'Doomed task' })).body;
+    await addEntry({ ...user, post: (url) => user.post(url, ws) }, { project_id: p.id, task_id: t.id, start: '2025-05-01T09:00:00.000Z', seconds: 900 });
+    await user.post('/api/timer/start', ws).send({ project_id: p.id });
+    await user.post('/api/catalog', ws).send({ name: 'Doomed item', price: 10 });
+    await user.put('/api/addons/catalog', ws).send({ isEnabled: true });
+    await user.put('/api/addons/ai_assistant/settings', ws).send({ openai_api_key: 'sk-doomed-1234567890' });
+    await user.post('/api/client-sources', ws).send({ name: `Doomed source ${Date.now()}` });
+    await user.post(`/api/workspaces/${ws}/invites`, ws).send({});
+
+    // An uploaded file of the workspace, on disk and in the files table
+    const storedName = `doomed-${Date.now()}.txt`;
+    fs.mkdirSync(process.env.CLOCKWIZE_UPLOADS_DIR, { recursive: true });
+    const storedPath = path.join(process.env.CLOCKWIZE_UPLOADS_DIR, storedName);
+    fs.writeFileSync(storedPath, 'doomed');
+    user.db.prepare(`
+      INSERT INTO files (id, user_id, workspace_id, client_id, original_name, storage_path)
+      VALUES (?, ?, ?, ?, 'doomed.txt', ?)
+    `).run(`file-${Date.now()}`, user.user.id, ws, c.id, storedName);
+
+    const { db } = user;
+    const workspaceTables = db.prepare(`
+      SELECT m.name FROM sqlite_master m
+      WHERE m.type = 'table' AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name = 'workspace_id')
+    `).all().map((r) => r.name);
+    const rowsIn = (workspaceId) => Object.fromEntries(workspaceTables
+      .map((table) => [table, db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE workspace_id = ?`).get(workspaceId).n])
+      .filter(([, n]) => n > 0));
+    const otherBefore = rowsIn(user.workspaceId);
+    expect(Object.keys(rowsIn(ws)).length).toBeGreaterThan(10);
+
+    expect((await user.delete(`/api/workspaces/${ws}`, ws)).status).toBe(200);
+
+    expect(rowsIn(ws)).toEqual({});
+    expect(db.prepare('SELECT COUNT(*) AS n FROM workspaces WHERE id = ?').get(ws).n).toBe(0);
+    for (const [table, id] of [['clients', c.id], ['projects', p.id], ['tasks', t.id]]) {
+      expect(db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE id = ?`).get(id).n, table).toBe(0);
+    }
+    expect(fs.existsSync(storedPath)).toBe(false);
+
+    // The user's other workspace is untouched
+    expect(rowsIn(user.workspaceId)).toEqual(otherBefore);
+    expect((await user.get(`/api/clients/${keep.client.id}`)).status).toBe(200);
   });
 });
 

@@ -189,16 +189,17 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
         const encrypted = encryptCredential({ username, password, notes }, req.workspaceId);
 
+        // Omitted secrets keep their stored (encrypted) value; an explicit null / '' clears them
         db.prepare(`
-      UPDATE credentials 
+      UPDATE credentials
       SET service_name = ?, username = ?, password = ?, url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND workspace_id = ?
     `).run(
             service_name || existing.service_name,
-            encrypted.username,
-            encrypted.password,
+            username !== undefined ? encrypted.username : existing.username,
+            password !== undefined ? encrypted.password : existing.password,
             url !== undefined ? url : existing.url,
-            encrypted.notes,
+            notes !== undefined ? encrypted.notes : existing.notes,
             req.params.id,
             req.workspaceId
         );

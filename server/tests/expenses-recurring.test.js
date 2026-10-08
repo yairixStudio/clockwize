@@ -130,11 +130,13 @@ describe('expenses', () => {
     expect(cleared.body.category_id).toBeNull();
   });
 
-  // Bug: POST rejects amount <= 0, but PUT accepts any amount (negative expenses skew totals)
-  it.fails('rejects a non-positive amount on update too', async () => {
+  it('rejects a non-positive amount on update too', async () => {
     const user = await createUser();
     const e = (await expense(user, { amount: 100 })).body;
     expect((await user.put(`/api/expenses/${e.id}`).send({ amount: -100 })).status).toBe(400);
+    expect((await user.put(`/api/expenses/${e.id}`).send({ amount: 0 })).status).toBe(400);
+    expect((await user.put(`/api/expenses/${e.id}`).send({ amount: null })).status).toBe(400);
+    expect(user.db.prepare('SELECT amount FROM payments WHERE id = ?').get(e.id).amount).toBe(100);
   });
 
   it('an expense pointing at a category that no longer belongs to the workspace can still be edited', async () => {
@@ -336,6 +338,9 @@ describe('recurring payments', () => {
   describe('upcoming reminders', () => {
     afterEach(() => vi.useRealTimers());
 
+    // Local calendar day of a Date, the way due_date is reported
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     it('returns active templates due within N days, wrapping into next month', async () => {
       // Pin "today" to the 25th of the current month (local time) - only Date is faked
       const now = new Date();
@@ -364,7 +369,7 @@ describe('recurring payments', () => {
 
       expect(byId[due25.id].days_until_due).toBe(0);
       expect(byId[due28.id].days_until_due).toBe(3);
-      expect(new Date(byId[due28.id].due_date).getDate()).toBe(28);
+      expect(byId[due28.id].due_date).toBe(ymd(new Date(today.getFullYear(), today.getMonth(), 28)));
       expect(Boolean(byId[due2.id])).toBe(expected2 <= 7);
       expect(byId[inactive.id]).toBeUndefined();
       expect(res.body).toHaveLength(expected2 <= 7 ? 3 : 2);
@@ -372,10 +377,100 @@ describe('recurring payments', () => {
       const wide = await user.get('/api/recurring/upcoming/reminders?days=31');
       const wideById = Object.fromEntries(wide.body.map(r => [r.id, r]));
       expect(wideById[due2.id].days_until_due).toBe(expected2);
-      const nextMonth2 = new Date(wideById[due2.id].due_date);
-      expect(nextMonth2.getDate()).toBe(2);
-      expect(nextMonth2.getMonth()).toBe((today.getMonth() + 1) % 12);
+      expect(wideById[due2.id].due_date).toBe(ymd(new Date(today.getFullYear(), today.getMonth() + 1, 2)));
       expect(wideById[due20.id].days_until_due).toBe(daysInMonth - 25 + 20);
+    });
+
+    it('reports due_date as the intended local calendar day east of UTC (Israel)', async () => {
+      // Local midnight in Israel is 21:00/22:00 UTC of the previous day, so toISOString() used to
+      // report the 14th for a payment due on the 15th
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'Asia/Jerusalem';
+      try {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-08T09:00:00.000Z')); // Oct 8, 12:00 in Israel
+        const user = await createUser();
+        const { client } = await createClientProjectTask(user);
+        const mk = async (day) => (await recurring(user, { client_id: client.id, amount: 10, day_of_month: day })).body;
+        const due8 = await mk(8);
+        const due15 = await mk(15);
+        const due2 = await mk(2);
+
+        const byId = Object.fromEntries((await user.get('/api/recurring/upcoming/reminders?days=31')).body.map(r => [r.id, r]));
+        expect(byId[due8.id].due_date).toBe('2026-10-08');
+        expect(byId[due15.id].due_date).toBe('2026-10-15');
+        expect(byId[due2.id].due_date).toBe('2026-11-02');
+        expect(byId[due15.id].days_until_due).toBe(7);
+
+        // Wrapping into January of the next year (a fresh login - the old token is not valid in December)
+        vi.setSystemTime(new Date('2026-12-25T09:00:00.000Z'));
+        const later = await createUser();
+        const laterClient = (await createClientProjectTask(later)).client;
+        const jan2 = (await recurring(later, { client_id: laterClient.id, amount: 10, day_of_month: 2 })).body;
+        const jan = (await later.get('/api/recurring/upcoming/reminders?days=31')).body.find(r => r.id === jan2.id);
+        expect(jan.due_date).toBe('2027-01-02');
+      } finally {
+        if (originalTZ === undefined) delete process.env.TZ;
+        else process.env.TZ = originalTZ;
+      }
+    });
+
+    it('clamps day 29-31 to the end of short months and counts local calendar days', async () => {
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'Asia/Jerusalem';
+      vi.useFakeTimers({ toFake: ['Date'] });
+      // Templates due on the 28th-31st, seen at a pinned "now" (a fresh login for every date)
+      const upcomingAt = async (iso, days) => {
+        vi.setSystemTime(new Date(iso));
+        const user = await createUser();
+        const { client } = await createClientProjectTask(user);
+        const ids = {};
+        for (const day of [28, 29, 30, 31]) {
+          ids[day] = (await recurring(user, { client_id: client.id, amount: 10, day_of_month: day })).body.id;
+        }
+        const list = (await user.get(`/api/recurring/upcoming/reminders?days=${days}`)).body;
+        return (day) => {
+          const r = list.find(x => x.id === ids[day]);
+          return r && [r.due_date, r.days_until_due];
+        };
+      };
+      try {
+        // Feb 25 2026 (28 days): 29/30/31 fall due on Feb 28 in 3 days, not on Mar 1-3
+        let at = await upcomingAt('2026-02-25T10:00:00.000Z', 7);
+        expect(at(28)).toEqual(['2026-02-28', 3]);
+        expect(at(29)).toEqual(['2026-02-28', 3]);
+        expect(at(30)).toEqual(['2026-02-28', 3]);
+        expect(at(31)).toEqual(['2026-02-28', 3]);
+
+        // On Feb 28 itself the "31st" is due today
+        at = await upcomingAt('2026-02-28T10:00:00.000Z', 0);
+        expect(at(31)).toEqual(['2026-02-28', 0]);
+        expect(at(28)).toEqual(['2026-02-28', 0]);
+
+        // Leap year: the 29th exists, the 30th/31st clamp to it
+        at = await upcomingAt('2028-02-27T10:00:00.000Z', 7);
+        expect(at(29)).toEqual(['2028-02-29', 2]);
+        expect(at(31)).toEqual(['2028-02-29', 2]);
+
+        // Jan 31: the 31st is today; the 29th/30th have passed and are next due on Feb 28
+        at = await upcomingAt('2026-01-31T10:00:00.000Z', 31);
+        expect(at(31)).toEqual(['2026-01-31', 0]);
+        expect(at(30)).toEqual(['2026-02-28', 28]);
+        expect(at(29)).toEqual(['2026-02-28', 28]);
+
+        // April has 30 days: the 31st is due on Apr 30
+        at = await upcomingAt('2026-04-29T09:00:00.000Z', 7);
+        expect(at(31)).toEqual(['2026-04-30', 1]);
+        expect(at(30)).toEqual(['2026-04-30', 1]);
+
+        // Across the DST switch (Fri Mar 27, a 23-hour day) days are still whole calendar days
+        at = await upcomingAt('2026-03-25T10:00:00.000Z', 7);
+        expect(at(29)).toEqual(['2026-03-29', 4]);
+        expect(at(31)).toEqual(['2026-03-31', 6]);
+      } finally {
+        if (originalTZ === undefined) delete process.env.TZ;
+        else process.env.TZ = originalTZ;
+      }
     });
 
     it('defaults to 7 days and treats a non-numeric window as none', async () => {

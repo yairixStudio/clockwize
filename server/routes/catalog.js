@@ -7,6 +7,9 @@ const router = express.Router();
 // Helper to get db
 const getDb = (req) => req.app.locals.db;
 
+// A price of 0 (a free item) is a real price; only a missing/empty one means "no price"
+const priceOrNull = (price) => (price === undefined || price === null || price === '' ? null : price);
+
 // קבלת כל הפריטים בקטלוג
 router.get('/', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -73,7 +76,7 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
     db.prepare(`
       INSERT INTO catalog_items (id, workspace_id, user_id, name, description, price, pricing_type, unit, category, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.workspaceId, req.userId, name, description || null, price || null, pricing_type || 'fixed', unit || null, category || null, notes || null);
+    `).run(id, req.workspaceId, req.userId, name, description || null, priceOrNull(price), pricing_type || 'fixed', unit || null, category || null, notes || null);
     
     const item = db.prepare('SELECT * FROM catalog_items WHERE id = ?').get(id);
     res.status(201).json(item);
@@ -109,7 +112,7 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     `).run(
       name, 
       description || null, 
-      price || null, 
+      priceOrNull(price), 
       pricing_type || 'fixed', 
       unit || null, 
       category || null, 
