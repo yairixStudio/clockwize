@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { generateToken, authMiddleware, verifyPasswordResetToken } from '../middleware/auth.js';
+import { generateToken, authMiddleware, SESSION_REFRESH_AFTER_MS, verifyPasswordResetToken } from '../middleware/auth.js';
 import { createRateLimiter, ipAnd } from '../middleware/rateLimit.js';
 import { saveLocalSession, clearLocalSession } from '../utils/localSession.js';
 import { buildAuthResponse, buildPasswordResetRequiredResponse } from '../utils/authSession.js';
@@ -36,7 +36,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'כל השדות נדרשים' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(String(email).trim());
     if (existingUser) {
       return res.status(400).json({ error: 'משתמש עם אימייל זה כבר קיים' });
     }
@@ -96,7 +96,10 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(400).json({ error: 'אימייל וסיסמה נדרשים' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    // Emails match case-insensitively (an exact match wins if two accounts differ only in case)
+    const typedEmail = String(email).trim();
+    const user = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE ORDER BY (email = ?) DESC LIMIT 1')
+      .get(typedEmail, typedEmail);
     if (!user) {
       return res.status(401).json({ error: 'אימייל או סיסמה שגויים' });
     }
@@ -173,7 +176,9 @@ router.get('/me', authMiddleware, (req, res) => {
     res.json({
       ...user,
       workspaces,
-      currentWorkspace: workspaces[0] || null
+      currentWorkspace: workspaces[0] || null,
+      // Sliding session: a token older than a day is swapped for a fresh one
+      ...(Date.now() - (req.tokenIssuedAt || 0) > SESSION_REFRESH_AFTER_MS && { token: generateToken(req.userId) })
     });
   } catch (error) {
     console.error('Get user error:', error);
@@ -205,7 +210,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
 
     // Check if email is taken by another user
     if (email && email !== user.email) {
-      const existingUser = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, req.userId);
+      const existingUser = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(String(email).trim(), req.userId);
       if (existingUser) {
         return res.status(400).json({ error: 'אימייל זה כבר בשימוש' });
       }

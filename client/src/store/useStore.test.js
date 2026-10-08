@@ -134,6 +134,41 @@ describe('initAuth', () => {
     expect(localStorage.getItem('currentWorkspaceId')).toBeNull();
     expect(state()).toMatchObject({ isLoading: false, isAuthenticated: false, user: null });
   });
+
+  it('keeps the session when the server is not reachable yet, and retries until it answers', async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem('token', 'tok');
+      localStorage.setItem('currentWorkspaceId', 'ws-a');
+      authAPI.getMe
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockRejectedValueOnce(Object.assign(new Error('שגיאה בשרת (502)'), { status: 502 }))
+        .mockResolvedValue({ ...user, workspaces: [wsA], currentWorkspace: wsA });
+
+      await state().initAuth();
+      expect(localStorage.getItem('token')).toBe('tok');
+      expect(state()).toMatchObject({ isLoading: true, connectionError: true, isAuthenticated: false });
+
+      await vi.advanceTimersByTimeAsync(1000); // second attempt: 502
+      expect(state().connectionError).toBe(true);
+      await vi.advanceTimersByTimeAsync(2000); // third attempt: the server is up
+      expect(authAPI.getMe).toHaveBeenCalledTimes(3);
+      expect(state()).toMatchObject({ isLoading: false, connectionError: false, isAuthenticated: true });
+      expect(localStorage.getItem('token')).toBe('tok');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stores the refreshed token the server hands out and keeps it out of the user object', async () => {
+    localStorage.setItem('token', 'old');
+    authAPI.getMe.mockResolvedValue({ ...user, token: 'fresh', workspaces: [wsA], currentWorkspace: wsA });
+
+    await state().initAuth();
+
+    expect(localStorage.getItem('token')).toBe('fresh');
+    expect(state().user.token).toBeUndefined();
+  });
 });
 
 describe('login / register / logout', () => {

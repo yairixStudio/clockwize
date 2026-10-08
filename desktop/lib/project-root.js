@@ -38,10 +38,15 @@ function resolveProjectRoot() {
   return candidates.find(isProjectRoot) || null;
 }
 
-function saveProjectRoot(dir) {
+// Per-user app preferences (userData/config.json)
+const readUserConfig = () => readJson(userConfigFile()) || {};
+
+function saveUserConfig(changes) {
   const file = userConfigFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ ...readJson(file), projectRoot: dir }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ ...readUserConfig(), ...changes }, null, 2));
 }
 
-module.exports = { isProjectRoot, resolveProjectRoot, saveProjectRoot, readAppConfig };
+const saveProjectRoot = (dir) => saveUserConfig({ projectRoot: dir });
+
+module.exports = { isProjectRoot, resolveProjectRoot, saveProjectRoot, readAppConfig, readUserConfig, saveUserConfig };

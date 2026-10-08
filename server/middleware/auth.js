@@ -6,9 +6,14 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   throw new Error('JWT_SECRET must be set in the environment and be at least 32 characters long');
 }
 
-// iatMs: issue time in ms (the standard iat is whole seconds), compared with users.sessions_valid_after
+// iatMs: issue time in ms (the standard iat is whole seconds), compared with users.sessions_valid_after.
+// Sessions are long-lived and sliding: GET /api/auth/me hands out a fresh token once a day, so a
+// signed-in device stays signed in unless it goes unused for a year (or the session is revoked).
+export const SESSION_TTL = '365d';
+export const SESSION_REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+
 export const generateToken = (userId) => {
-  return jwt.sign({ userId, iatMs: Date.now() }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ userId, iatMs: Date.now() }, JWT_SECRET, { expiresIn: SESSION_TTL });
 };
 
 // A user the admin flagged for a forced password reset gets this instead of a session token: it is
@@ -63,6 +68,7 @@ export const authMiddleware = (req, res, next) => {
   }
 
   req.userId = decoded.userId;
+  req.tokenIssuedAt = issuedAt;
   next();
 };
 

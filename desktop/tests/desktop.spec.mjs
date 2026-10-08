@@ -44,8 +44,17 @@ test.beforeEach(async () => {
   });
 });
 
+const withTimeout = (promise, ms, label) => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} took longer than ${ms}ms`)), ms))
+]);
+
 test.afterEach(async () => {
-  await app?.close().catch(() => {});
+  // A hung quit on a CI runner must not stall the worker: give it 15s, then kill the process
+  const child = app?.process();
+  await withTimeout(app?.close() ?? Promise.resolve(), 15000, 'closing the app').catch(() => {
+    try { child?.kill('SIGKILL'); } catch { /* already gone */ }
+  });
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -74,15 +83,17 @@ test('shows a Dock icon and loads the app in its window', async () => {
 
 test('opening the menu-bar popover keeps the Dock icon', async () => {
   await mainWindow();
-  const dockVisible = await app.evaluate(async ({ app: electronApp, BrowserWindow }) => {
-    const popover = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('popover.html'));
-    popover.show();
+  // showInactive: shown without taking focus, which can stall on a headless CI runner
+  const dockVisible = await withTimeout(app.evaluate(async ({ app: electronApp, BrowserWindow }) => {
+    const popover = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('popover.html'));
+    if (!popover) throw new Error('popover window not found');
+    popover.showInactive();
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const visible = electronApp.dock.isVisible();
+    const visible = { popover: popover.isVisible(), dock: electronApp.dock.isVisible() };
     popover.hide();
     return visible;
-  });
-  expect(dockVisible).toBe(true);
+  }), 20000, 'showing the popover');
+  expect(dockVisible).toEqual({ popover: true, dock: true });
 });
 
 test('closing the window keeps the app running and the Dock icon brings it back', async () => {

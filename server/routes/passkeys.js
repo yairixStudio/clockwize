@@ -115,7 +115,7 @@ router.post('/signup/options', async (req, res) => {
       return res.status(400).json({ error: 'כתובת אימייל לא תקינה' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(String(email).trim());
     if (existingUser) {
       return res.status(400).json({ error: 'משתמש עם אימייל זה כבר קיים' });
     }
@@ -148,7 +148,7 @@ router.post('/signup/verify', async (req, res) => {
     }
 
     const { name, email } = flow.pendingUser;
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(String(email).trim());
     if (existingUser) {
       return res.status(400).json({ error: 'משתמש עם אימייל זה כבר קיים' });
     }
