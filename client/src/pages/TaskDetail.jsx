@@ -113,10 +113,7 @@ function TaskDetail() {
 
       // Load reminders
       try {
-        const allReminders = await remindersAPI.getAll({ include_read: 'true' });
-        const relevantReminders = allReminders.filter(r =>
-          r.association_type === 'task' && r.association_id === id
-        );
+        const relevantReminders = await remindersAPI.getAll({ include_read: 'true', type: 'task', id });
         setTaskReminders(relevantReminders);
       } catch (e) {
         console.error('Error loading reminders:', e);

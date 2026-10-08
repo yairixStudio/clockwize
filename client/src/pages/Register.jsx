@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { KeyRound } from 'lucide-react';
+import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import useStore from '../store/useStore';
+import { passkeysAPI } from '../services/api';
 
 function Register() {
   const [name, setName] = useState('');
@@ -9,40 +12,69 @@ function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { register } = useStore();
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const { register, completeAuth } = useStore();
   const navigate = useNavigate();
-  
+
+  const navigateAfterAuth = () => {
+    const pendingInviteCode = localStorage.getItem('pendingInviteCode');
+    if (pendingInviteCode) {
+      localStorage.removeItem('pendingInviteCode');
+      navigate(`/join/${pendingInviteCode}`);
+    } else {
+      navigate('/');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     if (password !== confirmPassword) {
       setError('הסיסמאות לא תואמות');
       return;
     }
-    
+
     if (password.length < 6) {
       setError('הסיסמה חייבת להכיל לפחות 6 תווים');
       return;
     }
-    
+
     setLoading(true);
-    
+
     try {
       await register(name, email, password);
-      
-      // Check for pending invite code
-      const pendingInviteCode = localStorage.getItem('pendingInviteCode');
-      if (pendingInviteCode) {
-        localStorage.removeItem('pendingInviteCode');
-        navigate(`/join/${pendingInviteCode}`);
-      } else {
-        navigate('/');
-      }
+      navigateAfterAuth();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasskeySignup = async () => {
+    setError('');
+
+    if (!name.trim() || !email.trim()) {
+      setError('להרשמה עם Passkey יש למלא שם ואימייל');
+      return;
+    }
+
+    setPasskeyLoading(true);
+
+    try {
+      const { flowId, options } = await passkeysAPI.signupOptions({ name: name.trim(), email: email.trim() });
+      const regResponse = await startRegistration({ optionsJSON: options });
+      const response = await passkeysAPI.signupVerify({ flowId, response: regResponse });
+      await completeAuth(response);
+      navigateAfterAuth();
+    } catch (err) {
+      // NotAllowedError = the user closed the passkey dialog - not an error worth showing
+      if (err?.name !== 'NotAllowedError') {
+        setError(err.message || 'ההרשמה עם Passkey נכשלה');
+      }
+    } finally {
+      setPasskeyLoading(false);
     }
   };
   
@@ -54,8 +86,10 @@ function Register() {
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label">שם מלא</label>
+          <label className="form-label" htmlFor="register-name">שם מלא</label>
           <input
+            id="register-name"
+            autoComplete="name"
             type="text"
             className="form-input"
             value={name}
@@ -66,8 +100,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">אימייל</label>
+          <label className="form-label" htmlFor="register-email">אימייל</label>
           <input
+            id="register-email"
+            autoComplete="email"
             type="email"
             className="form-input"
             value={email}
@@ -79,8 +115,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">סיסמה</label>
+          <label className="form-label" htmlFor="register-password">סיסמה</label>
           <input
+            id="register-password"
+            autoComplete="new-password"
             type="password"
             className="form-input"
             value={password}
@@ -92,8 +130,10 @@ function Register() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">אימות סיסמה</label>
+          <label className="form-label" htmlFor="register-password-confirm">אימות סיסמה</label>
           <input
+            id="register-password-confirm"
+            autoComplete="new-password"
             type="password"
             className="form-input"
             value={confirmPassword}
@@ -113,7 +153,23 @@ function Register() {
           {loading ? 'נרשם...' : 'הירשם'}
         </button>
       </form>
-      
+
+      {browserSupportsWebAuthn() && (
+        <>
+          <div className="auth-divider"><span>או</span></div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-lg auth-passkey-btn"
+            onClick={handlePasskeySignup}
+            disabled={passkeyLoading}
+          >
+            <KeyRound size={18} />
+            <span>{passkeyLoading ? 'ממתין לאימות...' : 'הירשם עם Passkey (ללא סיסמה)'}</span>
+          </button>
+          <p className="auth-passkey-hint">מלא שם ואימייל למעלה — סיסמה לא נדרשת</p>
+        </>
+      )}
+
       <div className="auth-footer">
         כבר יש לך חשבון? <Link to="/login">התחבר</Link>
       </div>

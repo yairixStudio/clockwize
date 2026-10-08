@@ -7,6 +7,34 @@ const router = Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// Project/task/subtask ids sent by the client must belong to the current workspace,
+// otherwise an entry could be linked to (and leak the names of) another workspace's data
+const findForeignReference = (db, workspaceId, { project_id, task_id, subtask_id } = {}) => {
+  if (project_id && !db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, workspaceId)) {
+    return 'פרויקט לא נמצא';
+  }
+  if (task_id && !db.prepare('SELECT id FROM tasks WHERE id = ? AND workspace_id = ?').get(task_id, workspaceId)) {
+    return 'משימה לא נמצאה';
+  }
+  if (subtask_id && !db.prepare(`
+    SELECT s.id FROM subtasks s
+    JOIN tasks t ON s.task_id = t.id
+    WHERE s.id = ? AND t.workspace_id = ?
+  `).get(subtask_id, workspaceId)) {
+    return 'תת-משימה לא נמצאה';
+  }
+  return null;
+};
+
+const findForeignAssociation = (db, workspaceId, associations) => {
+  if (!Array.isArray(associations)) return null;
+  for (const assoc of associations) {
+    const error = findForeignReference(db, workspaceId, { project_id: assoc?.project_id, task_id: assoc?.task_id });
+    if (error) return error;
+  }
+  return null;
+};
+
 // Get all active timers (user's own timers only)
 router.get('/active', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -235,6 +263,13 @@ router.post('/stop/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(404).json({ error: 'טיימר לא נמצא' });
     }
 
+    // Re-assigned project/task/subtask and extra associations must belong to this workspace
+    const foreignError = findForeignReference(db, req.workspaceId, { project_id, task_id, subtask_id })
+      || findForeignAssociation(db, req.workspaceId, additional_associations);
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     const now = new Date();
     const endTime = now.toISOString();
 
@@ -449,32 +484,19 @@ router.put('/active/:id/start-time', authMiddleware, workspaceMiddleware, (req, 
       return res.status(400).json({ error: 'זמן התחלה לא תקין' });
     }
     
+    // A start time in the future would make the elapsed time (and the saved entry) negative
+    if (newStartTime.getTime() > Date.now() + 60 * 1000) {
+      return res.status(400).json({ error: 'זמן התחלה לא יכול להיות בעתיד' });
+    }
+
     const startTimeISO = newStartTime.toISOString();
     
-    // If timer is running, we need to recalculate accumulated_seconds
-    // based on the new start time
-    let newAccumulated = timer.accumulated_seconds || 0;
-    
+    // accumulated_seconds holds only the closed (paused) intervals, which the new start time
+    // does not touch. Keep it as is so the live total (accumulated + now - start_time) matches
+    // the sum of intervals that stop saves.
+    const newAccumulated = timer.accumulated_seconds || 0;
+
     if (timer.is_running) {
-      // Calculate elapsed time from old start_time to now
-      const now = new Date();
-      const oldStartTime = new Date(timer.start_time);
-      const elapsed = Math.floor((now.getTime() - oldStartTime.getTime()) / 1000);
-      
-      // Calculate what the elapsed time would be with the new start time
-      const newElapsed = Math.floor((now.getTime() - newStartTime.getTime()) / 1000);
-      
-      // Adjust accumulated_seconds to maintain the same total elapsed time
-      // Total should be: accumulated_seconds + elapsed
-      // With new start: accumulated_seconds_new + newElapsed = accumulated_seconds + elapsed
-      // So: accumulated_seconds_new = accumulated_seconds + elapsed - newElapsed
-      newAccumulated = timer.accumulated_seconds + elapsed - newElapsed;
-      
-      // Ensure accumulated_seconds doesn't go negative
-      if (newAccumulated < 0) {
-        newAccumulated = 0;
-      }
-      
       // Update the active interval's start_time
       db.prepare(`
         UPDATE timer_intervals 
@@ -583,7 +605,8 @@ router.get('/entries', authMiddleware, workspaceMiddleware, (req, res) => {
       params.push(task_id);
     }
 
-    query += ' ORDER BY te.created_at DESC';
+    // Newest work first - by when it happened, not when it was logged
+    query += ' ORDER BY datetime(te.start_time) DESC, te.created_at DESC';
 
     const entries = db.prepare(query).all(...params);
     
@@ -628,6 +651,11 @@ router.post('/entries', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(400).json({ error: 'נדרש פרויקט' });
     }
 
+    // start_time is NOT NULL in time_entries
+    if (!start_time) {
+      return res.status(400).json({ error: 'נדרש זמן התחלה' });
+    }
+
     // Verify project belongs to workspace
     const project = db.prepare('SELECT * FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, req.workspaceId);
     if (!project) {
@@ -644,10 +672,20 @@ router.post('/entries', authMiddleware, workspaceMiddleware, (req, res) => {
 
     // Verify subtask if provided
     if (subtask_id) {
-      const subtask = db.prepare('SELECT * FROM subtasks WHERE id = ? AND task_id = ?').get(subtask_id, task_id);
+      const subtask = db.prepare('SELECT * FROM subtasks WHERE id = ? AND task_id = ?').get(subtask_id, task_id || null);
       if (!subtask) {
         return res.status(404).json({ error: 'תת-משימה לא נמצאה' });
       }
+    }
+
+    // Extra associations must belong to this workspace
+    const foreignError = findForeignAssociation(db, req.workspaceId, additional_associations);
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
+    if (start_time && end_time && new Date(end_time).getTime() < new Date(start_time).getTime()) {
+      return res.status(400).json({ error: 'זמן סיום לא יכול להיות לפני זמן התחלה' });
     }
 
     const id = uuidv4();
@@ -674,7 +712,7 @@ router.post('/entries', authMiddleware, workspaceMiddleware, (req, res) => {
     db.prepare(`
       INSERT INTO time_entries (id, user_id, workspace_id, project_id, task_id, subtask_id, start_time, end_time, duration, notes, is_manual)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-    `).run(id, req.userId, req.workspaceId, project_id, task_id || null, subtask_id || null, start_time, end_time, calculatedDuration, notes || null);
+    `).run(id, req.userId, req.workspaceId, project_id, task_id || null, subtask_id || null, start_time, end_time || null, calculatedDuration, notes || null);
 
     // Create a single interval for manual entries (for consistency with timer-created entries)
     if (start_time && end_time) {
@@ -741,12 +779,26 @@ router.put('/entries/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(403).json({ error: 'אין הרשאה לערוך רשומה זו' });
     }
 
+    // Re-assigned project/task/subtask and extra associations must belong to this workspace
+    const foreignError = findForeignReference(db, req.workspaceId, { project_id, task_id, subtask_id })
+      || findForeignAssociation(db, req.workspaceId, additional_associations);
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
+    // Fields missing from the body keep their stored value (partial updates)
+    const newStartTime = start_time || existing.start_time;
+    const newEndTime = end_time !== undefined ? (end_time || null) : existing.end_time;
+    const timesChanged = start_time !== undefined || end_time !== undefined;
+
     // Calculate duration if not provided
     let calculatedDuration = duration;
     if (calculatedDuration === undefined || calculatedDuration === null || isNaN(calculatedDuration) || calculatedDuration === '') {
-      if (start_time && end_time) {
-        const start = new Date(start_time).getTime();
-        const end = new Date(end_time).getTime();
+      if (!timesChanged) {
+        calculatedDuration = existing.duration || 0;
+      } else if (newStartTime && newEndTime) {
+        const start = new Date(newStartTime).getTime();
+        const end = new Date(newEndTime).getTime();
         if (!isNaN(start) && !isNaN(end)) {
           calculatedDuration = Math.floor((end - start) / 1000);
         } else {
@@ -760,9 +812,9 @@ router.put('/entries/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     if (calculatedDuration < 0) calculatedDuration = 0;
 
     // Validate: end_time must not be before start_time, and clamp duration
-    if (start_time && end_time) {
-      const startMs = new Date(start_time).getTime();
-      const endMs = new Date(end_time).getTime();
+    if (newStartTime && newEndTime) {
+      const startMs = new Date(newStartTime).getTime();
+      const endMs = new Date(newEndTime).getTime();
       if (!isNaN(startMs) && !isNaN(endMs) && endMs < startMs) {
         return res.status(400).json({ error: 'זמן סיום לא יכול להיות לפני זמן התחלה' });
       }
@@ -796,7 +848,7 @@ router.put('/entries/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       UPDATE time_entries
       SET start_time = ?, end_time = ?, duration = ?, notes = ?, project_id = ?, task_id = ?, subtask_id = ?, is_edited = 1
       WHERE id = ?
-    `).run(start_time, end_time, calculatedDuration, notes || null, newProjectId, newTaskId, newSubtaskId, req.params.id);
+    `).run(newStartTime, newEndTime, calculatedDuration, notes !== undefined ? (notes || null) : existing.notes, newProjectId, newTaskId, newSubtaskId, req.params.id);
 
     // Handle intervals update if provided
     if (intervals && Array.isArray(intervals)) {

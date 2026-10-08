@@ -8,6 +8,10 @@ const router = Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// A client source must be global (workspace_id NULL) or belong to the current workspace
+const isSourceAvailable = (db, sourceId, workspaceId) =>
+  !sourceId || !!db.prepare('SELECT id FROM client_sources WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL)').get(sourceId, workspaceId);
+
 // Domain lookup for Chrome extension - MUST BE BEFORE /:id route!
 router.get('/lookup/domain', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -186,7 +190,7 @@ router.get('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
          WHERE p.client_id = c.id AND (p.pricing_type IS NULL OR p.pricing_type != 'no_charge') AND (t.pricing_type IS NULL OR t.pricing_type != 'no_charge')) as billable_time
       FROM clients c
       LEFT JOIN client_sources cs ON c.source_id = cs.id
-      WHERE c.id = ? AND (c.workspace_id = ? OR c.workspace_id IS NULL) AND c.user_id = ?
+      WHERE c.id = ? AND (c.workspace_id = ? OR (c.workspace_id IS NULL AND c.user_id = ?))
     `).get(req.params.id, req.workspaceId, req.userId);
 
     if (!client) {
@@ -221,6 +225,10 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
 
     if (!name) {
       return res.status(400).json({ error: 'שם לקוח נדרש' });
+    }
+
+    if (!isSourceAvailable(db, source_id, req.workspaceId)) {
+      return res.status(404).json({ error: 'מקור לא נמצא' });
     }
 
     const id = uuidv4();
@@ -258,7 +266,7 @@ router.patch('/:id/favorite', authMiddleware, workspaceMiddleware, (req, res) =>
     const db = getDb(req);
     const { is_favorite } = req.body;
 
-    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });
     }
@@ -282,9 +290,13 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     const { name, address, phone, email, bank_name, bank_account, bank_branch, tax_id, notes, hourly_rate, status, is_favorite, morning_id, source_id, sub_source, aliases, domains } = req.body;
 
-    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const existing = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });
+    }
+
+    if (!isSourceAvailable(db, source_id, req.workspaceId)) {
+      return res.status(404).json({ error: 'מקור לא נמצא' });
     }
 
     // Handle aliases and domains - store as JSON strings
@@ -302,15 +314,16 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       WHERE id = ? AND workspace_id = ?
     `).run(
       name || existing.name,
-      address || null,
-      phone || null,
-      email || null,
-      bank_name || null,
-      bank_account || null,
-      bank_branch || null,
-      tax_id || null,
-      notes || null,
-      hourly_rate || null,
+      // Fields missing from the body keep their stored value (partial updates, e.g. rename)
+      address !== undefined ? (address || null) : existing.address,
+      phone !== undefined ? (phone || null) : existing.phone,
+      email !== undefined ? (email || null) : existing.email,
+      bank_name !== undefined ? (bank_name || null) : existing.bank_name,
+      bank_account !== undefined ? (bank_account || null) : existing.bank_account,
+      bank_branch !== undefined ? (bank_branch || null) : existing.bank_branch,
+      tax_id !== undefined ? (tax_id || null) : existing.tax_id,
+      notes !== undefined ? (notes || null) : existing.notes,
+      hourly_rate !== undefined ? (hourly_rate || null) : existing.hourly_rate,
       status || existing.status || 'active',
       is_favorite !== undefined ? (is_favorite ? 1 : 0) : existing.is_favorite,
       morning_id !== undefined ? morning_id : existing.morning_id,
@@ -347,7 +360,7 @@ router.delete('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     
     // First check if the client exists and belongs to this workspace
-    const client = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL) AND user_id = ?').get(req.params.id, req.workspaceId, req.userId);
+    const client = db.prepare('SELECT * FROM clients WHERE id = ? AND (workspace_id = ? OR (workspace_id IS NULL AND user_id = ?))').get(req.params.id, req.workspaceId, req.userId);
     
     if (!client) {
       return res.status(404).json({ error: 'לקוח לא נמצא' });

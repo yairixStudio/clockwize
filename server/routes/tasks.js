@@ -136,13 +136,30 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
       }
     }
 
-    const platformsJson = communication_platforms ? JSON.stringify(communication_platforms) : null;
+    // Fields missing from the body keep their stored value (partial updates)
+    const platformsJson = communication_platforms !== undefined
+      ? (communication_platforms ? JSON.stringify(communication_platforms) : null)
+      : existing.communication_platforms;
 
     db.prepare(`
       UPDATE tasks
       SET project_id = ?, name = ?, description = ?, pricing_type = ?, hourly_rate = ?, status = ?, notes = ?, paid_amount = ?, estimated_hours = ?, priority = ?, communication_platforms = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND workspace_id = ?
-    `).run(newProjectId, name, description || null, pricing_type || null, hourly_rate || null, status, notes || null, paid_amount || 0, estimated_hours || null, priority || 'normal', platformsJson, req.params.id, req.workspaceId);
+    `).run(
+      newProjectId,
+      name !== undefined ? name : existing.name,
+      description !== undefined ? (description || null) : existing.description,
+      pricing_type !== undefined ? (pricing_type || null) : existing.pricing_type,
+      hourly_rate !== undefined ? (hourly_rate || null) : existing.hourly_rate,
+      status !== undefined ? status : existing.status,
+      notes !== undefined ? (notes || null) : existing.notes,
+      paid_amount !== undefined ? (paid_amount || 0) : existing.paid_amount,
+      estimated_hours !== undefined ? (estimated_hours || null) : existing.estimated_hours,
+      priority !== undefined ? (priority || 'normal') : existing.priority,
+      platformsJson,
+      req.params.id,
+      req.workspaceId
+    );
 
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     res.json(task);

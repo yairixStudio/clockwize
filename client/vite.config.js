@@ -16,7 +16,8 @@ function getServerPort() {
   return 3000;
 }
 
-const serverPort = getServerPort();
+// CLOCKWIZE_API_PORT points the dev proxy at a specific server (e.g. a throwaway demo one)
+const serverPort = Number(process.env.CLOCKWIZE_API_PORT) || getServerPort();
 console.log(`🔗 Proxying /api to http://localhost:${serverPort}`);
 
 // פורט 5000 תפוס על ידי macOS ControlCenter, אז משתמשים ב-5001

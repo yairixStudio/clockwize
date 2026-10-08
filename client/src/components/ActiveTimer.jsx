@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Play, Pause, Square, X as XIcon, User, Timer, Plus, Trash2, Edit2, Link2 } from 'lucide-react';
@@ -33,7 +33,8 @@ function ClientTimerItem({ timer, clientId, onPause, onResume, onStop, onDiscard
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [timer]);
+    // Keyed on primitives so the interval isn't torn down on every re-render
+  }, [timer.isPaused, timer.startTime, timer.accumulatedSeconds]);
 
   const label = timer.clientName || 'לקוח';
   
@@ -209,7 +210,14 @@ function CollapsedTimerIndicator({ timers, totalCount, onPause, onResume }) {
 }
 
 function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
-  const { activeTimers, pauseTimer, resumeTimer, stopTimer, discardTimer, updateTimerStartTime } = useStore();
+  // Per-field selectors - this component is mounted twice per page, a whole-store
+  // subscription re-renders both copies on every timer sync tick
+  const activeTimers = useStore(s => s.activeTimers);
+  const pauseTimer = useStore(s => s.pauseTimer);
+  const resumeTimer = useStore(s => s.resumeTimer);
+  const stopTimer = useStore(s => s.stopTimer);
+  const discardTimer = useStore(s => s.discardTimer);
+  const updateTimerStartTime = useStore(s => s.updateTimerStartTime);
   const modal = useModal();
   const navigate = useNavigate();
   const [showStopModal, setShowStopModal] = useState(false);
@@ -251,22 +259,23 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
 
   // Client timers from localStorage
   const [clientTimers, setClientTimers] = useState({});
-  
+  const clientTimersRawRef = useRef(null);
+
   // Load client timers from localStorage
   useEffect(() => {
     const loadClientTimers = () => {
-      const saved = localStorage.getItem('clientTimers');
-      if (saved) {
-        try {
-          setClientTimers(JSON.parse(saved));
-        } catch {
-          setClientTimers({});
-        }
-      } else {
+      const saved = localStorage.getItem('clientTimers') || '{}';
+      // Only rebuild state when the stored value actually changed, otherwise
+      // the poll below creates a new object identity every second
+      if (saved === clientTimersRawRef.current) return;
+      clientTimersRawRef.current = saved;
+      try {
+        setClientTimers(JSON.parse(saved));
+      } catch {
         setClientTimers({});
       }
     };
-    
+
     loadClientTimers();
     
     // Listen for storage changes (from other tabs or Dashboard updates)
@@ -286,18 +295,42 @@ function ActiveTimer({ isSidebar = false, isCollapsed = false }) {
     };
   }, []);
   
-  // Update localStorage helper
+  // Update localStorage helper - the Dashboard writes the same key, so updates
+  // start from the stored value rather than from possibly stale local state
   const updateClientTimers = useCallback((updater) => {
-    setClientTimers(prev => {
-      const newTimers = typeof updater === 'function' ? updater(prev) : updater;
-      localStorage.setItem('clientTimers', JSON.stringify(newTimers));
-      return newTimers;
-    });
+    const saved = localStorage.getItem('clientTimers') || '{}';
+    let current = {};
+    try {
+      current = JSON.parse(saved);
+    } catch {
+      current = {};
+    }
+    const newTimers = typeof updater === 'function' ? updater(current) : updater;
+    const raw = JSON.stringify(newTimers);
+    clientTimersRawRef.current = raw;
+    localStorage.setItem('clientTimers', raw);
+    setClientTimers(newTimers);
   }, []);
-  
+
   // Lock body scroll when stop modal is open
   useBodyScrollLock(showStopModal);
-  
+
+  // A server timer can disappear while its modal is open (stopped elsewhere,
+  // or removed by the sync poll) - close the modal so it doesn't get orphaned
+  useEffect(() => {
+    const serverTimers = activeTimers || [];
+    if (showStopModal && selectedTimer && !selectedTimer.isClientTimer &&
+        !serverTimers.some(t => t.id === selectedTimer.id)) {
+      setShowStopModal(false);
+      setSelectedTimer(null);
+    }
+    if (showEditStartTimeModal && editTimer && !editTimer.isClientTimer &&
+        !serverTimers.some(t => t.id === editTimer.id)) {
+      setShowEditStartTimeModal(false);
+      setEditTimer(null);
+    }
+  }, [activeTimers, showStopModal, selectedTimer, showEditStartTimeModal, editTimer]);
+
   const clientTimerEntries = Object.entries(clientTimers);
   const hasServerTimers = activeTimers && activeTimers.length > 0;
   const hasClientTimers = clientTimerEntries.length > 0;

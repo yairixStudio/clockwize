@@ -51,6 +51,20 @@ function generateRecurrenceDates(startDate, recurrenceType, interval, endDate) {
   return dates;
 }
 
+// Client / project / lead a slot points at must belong to the workspace (their names are joined in)
+function findForeignReference(db, workspaceId, { client_id, project_id, lead_id }) {
+  if (client_id && !db.prepare('SELECT id FROM clients WHERE id = ? AND workspace_id = ?').get(client_id, workspaceId)) {
+    return 'לקוח לא נמצא';
+  }
+  if (project_id && !db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, workspaceId)) {
+    return 'פרויקט לא נמצא';
+  }
+  if (lead_id && !db.prepare('SELECT id FROM leads WHERE id = ? AND workspace_id = ?').get(lead_id, workspaceId)) {
+    return 'ליד לא נמצא';
+  }
+  return null;
+}
+
 // Get all planned slots
 router.get('/', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -83,6 +97,11 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
     }
     if (!client_id && !lead_id) {
       return res.status(400).json({ error: 'נדרש לקוח או ליד' });
+    }
+
+    const foreignError = findForeignReference(db, req.workspaceId, { client_id, project_id, lead_id });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     if (is_recurring && recurrence_type) {
@@ -157,6 +176,16 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'סלוט לא נמצא' });
+    }
+
+    // Only values that change are checked, so a stale stored reference does not block edits
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      client_id: client_id !== existing.client_id ? client_id : null,
+      project_id: project_id !== existing.project_id ? project_id : null,
+      lead_id: lead_id !== existing.lead_id ? lead_id : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     db.prepare(`

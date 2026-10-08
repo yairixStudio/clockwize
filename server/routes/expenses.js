@@ -7,6 +7,17 @@ const router = express.Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// Referenced project / category must belong to the workspace (otherwise their names leak through the joins)
+const findForeignReference = (db, workspaceId, { project_id, category_id }) => {
+  if (project_id && !db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, workspaceId)) {
+    return 'Project not found';
+  }
+  if (category_id && !db.prepare('SELECT id FROM expense_categories WHERE id = ? AND workspace_id = ?').get(category_id, workspaceId)) {
+    return 'Category not found';
+  }
+  return null;
+};
+
 // Get all expense categories
 router.get('/categories', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -179,6 +190,11 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
+    const foreignError = findForeignReference(db, req.workspaceId, { project_id, category_id });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     const id = uuidv4();
     const createdAt = new Date().toISOString();
 
@@ -229,6 +245,15 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'Expense not found' });
+    }
+
+    // Only values that change are checked, so a stale stored reference does not block edits
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      project_id: project_id !== existing.project_id ? project_id : null,
+      category_id: category_id !== existing.category_id ? category_id : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     db.prepare(`
@@ -311,7 +336,13 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
       WHERE p.workspace_id = ? AND p.type = 'expense'${dateFilter}
     `).get(...params);
 
-    // By category
+    // By category - params must follow placeholder order: the date filter sits in the JOIN, before ec.workspace_id
+    const byCategoryParams = [];
+    if (start_date && end_date) {
+      byCategoryParams.push(start_date, end_date);
+    }
+    byCategoryParams.push(req.workspaceId);
+
     const byCategory = db.prepare(`
       SELECT 
         ec.id,
@@ -320,11 +351,11 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
         ec.icon,
         COALESCE(SUM(p.amount), 0) as total
       FROM expense_categories ec
-      LEFT JOIN payments p ON p.category_id = ec.id AND p.type = 'expense'${dateFilter.replace('p.workspace_id', 'ec.workspace_id')}
+      LEFT JOIN payments p ON p.category_id = ec.id AND p.type = 'expense'${dateFilter}
       WHERE ec.workspace_id = ?
       GROUP BY ec.id
       ORDER BY total DESC
-    `).all(req.workspaceId);
+    `).all(...byCategoryParams);
 
     // Uncategorized
     const uncategorized = db.prepare(`

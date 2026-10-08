@@ -1,56 +1,36 @@
 #!/bin/bash
 
-# Clockwize Launcher Script
-# This script starts the Clockwize application and opens it in the default browser
+# Clockwize launcher
+# Opens the installed desktop app (window + Dock icon + menu-bar timer).
+# Without it, falls back to the development servers in the browser.
 
-# Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-# Change to the project directory
 cd "$SCRIPT_DIR"
 
-# Function to cleanup on exit
-cleanup() {
-    echo "Stopping Clockwize..."
-    # Kill all child processes
-    pkill -P $$
+if [ -d "/Applications/Clockwize.app" ]; then
+    open -a "/Applications/Clockwize.app"
     exit 0
-}
-
-# Set up trap to catch exit signals
-trap cleanup SIGINT SIGTERM EXIT
-
-# Check if node_modules exists
-if [ ! -d "node_modules" ]; then
-    echo "Installing dependencies..."
-    npm install
 fi
 
-# Start the application in the background
-echo "Starting Clockwize..."
-npm run dev &
+echo "Clockwize.app is not installed - install it with: npm run desktop:install"
+echo "Starting the development servers instead..."
 
-# Wait for the server to be ready (check for port 5173)
-echo "Waiting for server to start..."
+if [ ! -d "node_modules" ]; then
+    npm run install:all
+fi
+
+npm run dev &
+DEV_PID=$!
+trap 'kill $DEV_PID 2>/dev/null' SIGINT SIGTERM EXIT
+
+# Vite serves the client on 5001 (5000 is taken by macOS AirPlay)
 for i in {1..30}; do
-    if curl -s http://localhost:5173 > /dev/null 2>&1; then
-        echo "Server is ready!"
+    if curl -s http://localhost:5001 > /dev/null 2>&1; then
+        open http://localhost:5001
         break
     fi
     sleep 1
 done
 
-# Open the browser
-echo "Opening browser..."
-open http://localhost:5173
-
-# Start Menu Bar app if exists
-MENUBAR_APP="$SCRIPT_DIR/ClockwizeMenuBar.app"
-if [ -d "$MENUBAR_APP" ]; then
-    echo "Starting Menu Bar app..."
-    open "$MENUBAR_APP"
-fi
-
-# Keep the script running
-echo "Clockwize is running. Press Ctrl+C to stop."
-wait
+echo "Clockwize is running at http://localhost:5001 - press Ctrl+C to stop."
+wait $DEV_PID

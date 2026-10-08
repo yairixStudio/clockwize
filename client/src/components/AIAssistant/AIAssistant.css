@@ -10,7 +10,7 @@
   border-radius: 0 10px 10px 0;
   padding: 14px 10px;
   cursor: pointer;
-  z-index: 998;
+  z-index: var(--z-floating);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -50,7 +50,7 @@
   bottom: 0;
   left: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1001;
+  z-index: var(--z-overlay);
   animation: fadeIn 0.3s ease-out;
 }
 

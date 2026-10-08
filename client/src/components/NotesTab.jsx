@@ -5,6 +5,7 @@ import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { notesAPI } from '../services/api';
 import { useModal } from './Modal';
 import { formatDateTime } from '../utils/format';
+import { sanitizeHtml } from '../utils/sanitize';
 import './NotesTab.css';
 
 export default function NotesTab({ entityType, entityId }) {
@@ -163,7 +164,7 @@ export default function NotesTab({ entityType, entityId }) {
                     </button>
                   </div>
                 </div>
-                <div className="note-content-preview ql-editor" dangerouslySetInnerHTML={{ __html: note.content }} />
+                <div className="note-content-preview ql-editor" dangerouslySetInnerHTML={{ __html: sanitizeHtml(note.content) }} />
                 <div className="note-meta">
                   {formatDateTime(note.updated_at || note.created_at)}
                 </div>

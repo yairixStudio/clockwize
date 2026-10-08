@@ -214,6 +214,11 @@ const SYSTEM_PROMPT = `אתה עוזר AI של מערכת Clockwize - מערכת
   ]
 }`;
 
+// Limits come from model-generated arguments - always coerce and bound them
+function normalizeLimit(limit) {
+  return Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+}
+
 // Helper function to search entities
 function searchEntities(db, workspaceId, type, filters = {}) {
   switch (type) {
@@ -227,7 +232,8 @@ function searchEntities(db, workspaceId, type, filters = {}) {
         params.push(searchTerm, searchTerm, searchTerm);
       }
       
-      query += ` ORDER BY name LIMIT ${filters.limit || 50}`;
+      query += ` ORDER BY name LIMIT ?`;
+      params.push(normalizeLimit(filters.limit));
       return db.prepare(query).all(...params);
     }
     
@@ -251,7 +257,8 @@ function searchEntities(db, workspaceId, type, filters = {}) {
         params.push(searchTerm, searchTerm);
       }
       
-      query += ` ORDER BY p.name LIMIT ${filters.limit || 50}`;
+      query += ` ORDER BY p.name LIMIT ?`;
+      params.push(normalizeLimit(filters.limit));
       return db.prepare(query).all(...params);
     }
     
@@ -275,7 +282,8 @@ function searchEntities(db, workspaceId, type, filters = {}) {
         params.push(`%${filters.search}%`);
       }
       
-      query += ` ORDER BY t.name LIMIT ${filters.limit || 50}`;
+      query += ` ORDER BY t.name LIMIT ?`;
+      params.push(normalizeLimit(filters.limit));
       return db.prepare(query).all(...params);
     }
     

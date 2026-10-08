@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
+import { decrypt } from '../utils/crypto.js';
 
 const router = Router();
 
@@ -47,6 +49,28 @@ function ensureLeadProject(db, lead, userId, workspaceId) {
 
   return projectId;
 }
+
+// Client / source / assignee a lead points at must belong to the workspace (global sources are
+// allowed). Otherwise their names leak through the joins, and converting an opportunity would
+// return another workspace's client record.
+function findForeignReference(db, workspaceId, { client_id, source_id, assigned_to }) {
+  if (client_id && !db.prepare('SELECT id FROM clients WHERE id = ? AND workspace_id = ?').get(client_id, workspaceId)) {
+    return 'לקוח לא נמצא';
+  }
+  if (source_id && !db.prepare('SELECT id FROM client_sources WHERE id = ? AND (workspace_id = ? OR workspace_id IS NULL)').get(source_id, workspaceId)) {
+    return 'מקור לא נמצא';
+  }
+  if (assigned_to && !db.prepare('SELECT id FROM workspace_members WHERE workspace_id = ? AND user_id = ?').get(workspaceId, assigned_to)) {
+    return 'משתמש לא נמצא ב-workspace';
+  }
+  return null;
+}
+
+const safeEqual = (a, b) => {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
 
 // Apply auth middleware to all routes except webhook
 router.use((req, res, next) => {
@@ -309,6 +333,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'שם ליד נדרש' });
     }
 
+    const foreignError = findForeignReference(db, req.workspaceId, { client_id, source_id, assigned_to });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     const id = uuidv4();
     const opportunityFlag = (client_id || is_opportunity) ? 1 : 0;
     db.prepare(`
@@ -367,6 +396,15 @@ router.put('/:id', async (req, res) => {
       status, priority, expected_value, expected_close_date,
       assigned_to, tags, notes, lost_reason
     } = req.body;
+
+    // Only values that change are checked, so e.g. an assignee who left the workspace does not block edits
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      source_id: source_id !== lead.source_id ? source_id : null,
+      assigned_to: assigned_to !== lead.assigned_to ? assigned_to : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
 
     // Track status change
     if (status && status !== lead.status) {
@@ -485,6 +523,13 @@ router.patch('/:id/assign', async (req, res) => {
 
     if (!lead) {
       return res.status(404).json({ error: 'ליד לא נמצא' });
+    }
+
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      assigned_to: assigned_to !== lead.assigned_to ? assigned_to : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     db.prepare(`
@@ -664,9 +709,9 @@ router.post('/:id/convert', async (req, res) => {
     // Step 4b: For new leads - save activity history as note on acquisition project
     if (!lead.client_id && acquisitionProjectId && activityLog) {
       db.prepare(`
-        INSERT INTO notes (id, user_id, entity_type, entity_id, title, content)
-        VALUES (?, ?, 'project', ?, ?, ?)
-      `).run(uuidv4(), req.userId, acquisitionProjectId, 'היסטוריית ליד', activityLog);
+        INSERT INTO notes (id, user_id, workspace_id, entity_type, entity_id, title, content)
+        VALUES (?, ?, ?, 'project', ?, ?, ?)
+      `).run(uuidv4(), req.userId, req.workspaceId, acquisitionProjectId, 'היסטוריית ליד', activityLog);
     }
 
     // Step 5: Update lead status
@@ -970,19 +1015,24 @@ router.put('/:id/reminders/:reminderId', async (req, res) => {
     const db = getDb(req);
     const { content, due_date, is_completed } = req.body;
 
-    // Map is_completed to is_read in unified reminders table
-    const isRead = is_completed !== undefined ? is_completed : undefined;
+    // Map is_completed to is_read in unified reminders table (NULL = keep current value, see COALESCE)
+    const isRead = is_completed !== undefined ? (is_completed ? 1 : 0) : null;
 
-    db.prepare(`
+    const result = db.prepare(`
       UPDATE reminders
       SET content = COALESCE(?, content),
           due_date = COALESCE(?, due_date),
           is_read = COALESCE(?, is_read),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND association_type = 'lead' AND association_id = ? AND workspace_id = ?
-    `).run(content, due_date, isRead, req.params.reminderId, req.params.id, req.workspaceId);
+    `).run(content ?? null, due_date ?? null, isRead, req.params.reminderId, req.params.id, req.workspaceId);
 
-    const reminder = db.prepare(`SELECT r.*, r.is_read as is_completed FROM reminders r WHERE r.id = ?`).get(req.params.reminderId);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'תזכורת לא נמצאה' });
+    }
+
+    const reminder = db.prepare(`SELECT r.*, r.is_read as is_completed FROM reminders r WHERE r.id = ? AND r.workspace_id = ?`)
+      .get(req.params.reminderId, req.workspaceId);
     res.json(reminder);
   } catch (error) {
     console.error('Update reminder error:', error);
@@ -1012,10 +1062,17 @@ router.post('/webhook', async (req, res) => {
     }
 
     const db = req.app.locals.db;
+    // The key is stored encrypted per workspace (addons.js encrypts every *api_key* setting),
+    // so it cannot be matched in SQL - decrypt each configured key and compare
     const setting = db.prepare(`
-      SELECT workspace_id FROM addon_settings
-      WHERE addon_id = 'leads_management' AND setting_key = 'webhook_api_key' AND setting_value = ?
-    `).get(apiKey);
+      SELECT workspace_id, setting_value FROM addon_settings
+      WHERE addon_id = 'leads_management' AND setting_key = 'webhook_api_key' AND setting_value IS NOT NULL
+    `).all().find(row => {
+      // a legacy plain-text key (not in the iv:data:tag shape) is compared as-is, like before
+      if (row.setting_value.split(':').length !== 3) return safeEqual(row.setting_value, apiKey);
+      const stored = decrypt(row.setting_value, row.workspace_id);
+      return stored !== null && safeEqual(stored, apiKey);
+    });
 
     if (!setting) {
       return res.status(403).json({ error: 'Invalid API key' });

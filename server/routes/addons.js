@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
-import { encrypt, decrypt } from '../utils/crypto.js';
+import { encrypt, decryptDetailed } from '../utils/crypto.js';
 
 const router = express.Router();
 
@@ -188,6 +188,10 @@ router.put('/', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     const { addons } = req.body; // מערך של { id, isEnabled }
     
+    if (!Array.isArray(addons)) {
+      return res.status(400).json({ error: 'נדרש מערך תוספים' });
+    }
+    
     for (const addon of addons) {
       // בדיקה שהתוסף קיים
       const addonExists = AVAILABLE_ADDONS.find(a => a.id === addon.id);
@@ -224,8 +228,39 @@ router.put('/', authMiddleware, workspaceMiddleware, (req, res) => {
 
 // Helper function to mask sensitive values for display
 function maskSensitiveValue(value) {
-  if (!value || value.length < 8) return '****';
+  // Short secrets (passwords, tokens) are fully hidden - first+last 4 would reveal most of them
+  if (!value || value.length < 16) return '****';
   return value.substring(0, 4) + '****' + value.substring(value.length - 4);
+}
+
+// בדיקה אם הערך שהתקבל הוא עדיין הערך הממוסך שנשלח לתצוגה
+function isMaskedValue(value) {
+  return typeof value === 'string' && /^.{0,4}\*{4}/.test(value);
+}
+
+// פענוח ערך רגיש לפי ה-workspace, עם תמיכה ברשומות ישנות שהוצפנו לפי מזהה המשתמש
+// ו/או במפתח השרת הישן. כל רשומה ישנה מוצפנת מחדש לפי ה-workspace והמפתח הנוכחי.
+function decryptSetting(db, workspaceId, userId, addonId, settingKey, storedValue) {
+  // סדר הניסיונות: (מפתח נוכחי/ישן, workspace) ואז (מפתח נוכחי/ישן, משתמש)
+  for (const salt of [workspaceId, userId]) {
+    if (!salt) continue;
+
+    const result = decryptDetailed(storedValue, salt);
+    if (!result) continue;
+
+    // כבר מוצפן עם המפתח הנוכחי ולפי ה-workspace - אין מה לעדכן
+    if (!result.legacy && salt === workspaceId) return result.value;
+
+    db.prepare(`
+      UPDATE addon_settings
+      SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE workspace_id = ? AND addon_id = ? AND setting_key = ?
+    `).run(encrypt(result.value, workspaceId), workspaceId, addonId, settingKey);
+
+    return result.value;
+  }
+
+  return null;
 }
 
 // קבלת הגדרות תוסף
@@ -258,7 +293,7 @@ router.get('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res)
       
       if (isSensitive && setting.setting_value) {
         // פענוח הערך המוצפן
-        const decrypted = decrypt(setting.setting_value, req.userId);
+        const decrypted = decryptSetting(db, req.workspaceId, req.userId, addonId, setting.setting_key, setting.setting_value);
         // מיסוך לתצוגה
         result[setting.setting_key] = maskSensitiveValue(decrypted);
         // שליחת דגל שיש ערך מוגדר
@@ -299,7 +334,11 @@ router.put('/:addonId/settings', authMiddleware, workspaceMiddleware, (req, res)
       
       // הצפנה של ערכים רגישים
       const isSensitive = SENSITIVE_SETTINGS.some(s => key.includes(s));
-      const storedValue = isSensitive && value ? encrypt(value, req.userId) : value;
+
+      // ערך רגיש שחזר ממוסך מהתצוגה - לא שונה, אין לדרוס את הערך השמור
+      if (isSensitive && isMaskedValue(value)) continue;
+
+      const storedValue = isSensitive && value ? encrypt(value, req.workspaceId) : value;
       
       // בדיקה אם יש כבר רשומה
       const existing = db.prepare(`
@@ -342,7 +381,7 @@ export async function getAddonSetting(db, workspaceId, userId, addonId, settingK
     // פענוח אם זה ערך רגיש
     const isSensitive = SENSITIVE_SETTINGS.some(s => settingKey.includes(s));
     if (isSensitive) {
-      return decrypt(setting.setting_value, userId);
+      return decryptSetting(db, workspaceId, userId, addonId, settingKey, setting.setting_value);
     }
     
     return setting.setting_value;

@@ -192,7 +192,7 @@
   bottom: 0;
   left: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
+  z-index: var(--z-overlay);
   display: block; /* Changed from flex to block to support absolute positioning of child better */
   animation: fadeIn 0.3s ease-out;
 }
@@ -234,7 +234,7 @@
   border-radius: 0 8px 8px 0;
   padding: 12px 8px;
   cursor: pointer;
-  z-index: 999;
+  z-index: var(--z-floating);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -306,4 +306,16 @@
 @keyframes fadeOut {
   from { opacity: 1; }
   to { opacity: 0; }
+}
+
+/* Small screens: an icon-only edge tab so it covers less of the content */
+@media (max-width: 768px) {
+  .forum-pinned-btn {
+    padding: 10px 6px;
+    gap: 0;
+  }
+
+  .forum-pinned-label {
+    display: none;
+  }
 }

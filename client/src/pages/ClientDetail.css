@@ -1187,6 +1187,21 @@
     height: 40px;
     font-size: 1.25rem;
   }
+
+  /* Scoped to this page only - .project-timer-area is also used by the Dashboard,
+     whose project row has no room for larger buttons on small screens */
+  .client-detail-page .project-timer-area .timer-btn,
+  .client-detail-page .project-timer-area .timer-play,
+  .client-detail-page .project-timer-area .timer-pause,
+  .client-detail-page .project-timer-area .timer-stop,
+  .client-detail-page .project-timer-area .timer-discard {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
+  }
 }
 
 /* Task Item - Unified Styles */
@@ -1221,4 +1236,12 @@
 
 .task-checkbox.checked {
   color: var(--success);
+}
+
+/* Larger touch target - scoped to this page. The identical .task-checkbox rule also
+   lives in Dashboard.css / Tasks.css / ProjectDetail.css, and they all end up in one
+   global stylesheet, so an unscoped size change here leaks (or gets overridden). */
+.client-detail-page .task-checkbox {
+  width: 36px;
+  height: 36px;
 }

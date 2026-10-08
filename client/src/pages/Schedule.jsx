@@ -364,10 +364,19 @@ function Schedule() {
   }, [plannedSlots, currentDate, view, displayMode]);
 
   const navigateDate = (direction) => {
-    const newDate = new Date(currentDate);
     if (view === 'month') {
-      newDate.setMonth(currentDate.getMonth() + direction);
-    } else if (view === 'day') {
+      // Build from parts - setMonth on the 29th-31st overflows into the next month.
+      // Keep the selected day (currentDate is shared with the week/day views), clamped
+      // to the target month's length.
+      const target = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);
+      const daysInTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+      target.setDate(Math.min(currentDate.getDate(), daysInTarget));
+      setCurrentDate(target);
+      return;
+    }
+
+    const newDate = new Date(currentDate);
+    if (view === 'day') {
       newDate.setDate(currentDate.getDate() + direction);
     } else {
       newDate.setDate(currentDate.getDate() + (direction * 7));

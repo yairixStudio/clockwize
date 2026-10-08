@@ -24,6 +24,26 @@ const getPaymentAssociations = (db, paymentId) => {
     }
 };
 
+// Every project / task a payment points at (main + additional associations) must belong to
+// the workspace - otherwise its name leaks through the joins and its paid_amount gets rewritten
+const findForeignReference = (db, workspaceId, { project_id, task_id, additional_associations }) => {
+    const associations = Array.isArray(additional_associations) ? additional_associations.filter(Boolean) : [];
+    const projectIds = [project_id, ...associations.map(a => a.project_id)].filter(Boolean);
+    const taskIds = [task_id, ...associations.map(a => a.task_id)].filter(Boolean);
+
+    for (const id of projectIds) {
+        if (!db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(id, workspaceId)) {
+            return 'פרויקט לא נמצא';
+        }
+    }
+    for (const id of taskIds) {
+        if (!db.prepare('SELECT id FROM tasks WHERE id = ? AND workspace_id = ?').get(id, workspaceId)) {
+            return 'משימה לא נמצאה';
+        }
+    }
+    return null;
+};
+
 // Get all payments with filters
 router.get('/', authMiddleware, workspaceMiddleware, (req, res) => {
     try {
@@ -135,11 +155,12 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
             AND p.due_date < date('now')
         `).get(req.workspaceId);
 
-        // By client
-        const byClientParams = [req.workspaceId];
+        // By client - params must follow placeholder order: the date filter sits in the JOIN, before c.workspace_id
+        const byClientParams = [];
         if (start_date && end_date) {
             byClientParams.push(start_date, end_date);
         }
+        byClientParams.push(req.workspaceId);
         const byClient = db.prepare(`
             SELECT 
                 c.id,
@@ -148,12 +169,12 @@ router.get('/summary', authMiddleware, workspaceMiddleware, (req, res) => {
                 COALESCE(SUM(CASE WHEN p.status IN ('pending', 'sent', 'draft') THEN p.amount ELSE 0 END), 0) as pending
             FROM clients c
             LEFT JOIN projects proj ON proj.client_id = c.id
-            LEFT JOIN payments p ON p.project_id = proj.id AND (p.type IS NULL OR p.type = 'income')${dateFilter.replace('p.date', 'p.date')}
+            LEFT JOIN payments p ON p.project_id = proj.id AND (p.type IS NULL OR p.type = 'income')${dateFilter}
             WHERE c.workspace_id = ?
             GROUP BY c.id
             HAVING paid > 0 OR pending > 0
             ORDER BY paid DESC
-        `).all(...byClientParams.reverse());
+        `).all(...byClientParams);
 
         res.json({
             income: incomeResult.total,
@@ -246,12 +267,10 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
             return res.status(400).json({ error: 'חסרים פרטי חובה (סכום, תאריך)' });
         }
 
-        // Verify project belongs to workspace (if provided)
-        if (project_id) {
-            const project = db.prepare('SELECT * FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, req.workspaceId);
-            if (!project) {
-                return res.status(404).json({ error: 'פרויקט לא נמצא' });
-            }
+        // Verify project / task / associations belong to workspace (if provided)
+        const foreignError = findForeignReference(db, req.workspaceId, { project_id, task_id, additional_associations });
+        if (foreignError) {
+            return res.status(404).json({ error: foreignError });
         }
 
         const id = uuidv4();
@@ -346,6 +365,22 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
         if (!payment) {
             return res.status(404).json({ error: 'תשלום לא נמצא' });
+        }
+
+        // Verify new project / task / associations belong to workspace - only values that change,
+        // so a record whose stored reference went stale can still be edited
+        const existingAssociations = getPaymentAssociations(db, id);
+        const isExistingAssociation = (a) => existingAssociations.some(e =>
+            (e.project_id || null) === (a.project_id || null) && (e.task_id || null) === (a.task_id || null));
+        const foreignError = findForeignReference(db, req.workspaceId, {
+            project_id: project_id !== payment.project_id ? project_id : null,
+            task_id: task_id !== payment.task_id ? task_id : null,
+            additional_associations: Array.isArray(additional_associations)
+                ? additional_associations.filter(a => a && !isExistingAssociation(a))
+                : additional_associations
+        });
+        if (foreignError) {
+            return res.status(404).json({ error: foreignError });
         }
 
         // Determine paid_date based on status

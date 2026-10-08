@@ -14,7 +14,7 @@
   left: 0;
   right: 0;
   height: 60px;
-  z-index: 200;
+  z-index: var(--z-sticky);
   padding: 0 1rem;
   align-items: center;
   justify-content: space-between;
@@ -65,6 +65,11 @@
   white-space: nowrap;
 }
 
+/* With a running timer the header is full: keep only the logo icon */
+.mobile-header:has(.active-timer-item) .mobile-logo span {
+  display: none;
+}
+
 .mobile-header-actions {
   display: flex;
   align-items: center;
@@ -86,7 +91,7 @@
   right: 0;
   overflow-y: auto;
   transition: width 0.3s ease, transform 0.3s ease;
-  z-index: 100;
+  z-index: var(--z-sticky);
 }
 
 .sidebar.sidebar-resizing {
@@ -103,7 +108,7 @@
   height: 100%;
   cursor: ew-resize;
   background: transparent;
-  z-index: 200;
+  z-index: var(--z-sticky);
   transition: background-color 0.2s;
 }
 
@@ -202,7 +207,7 @@
   right: 220px;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 150;
+  z-index: var(--z-sticky);
   box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -249,7 +254,7 @@
   display: flex;
   justify-content: center;
   position: relative;
-  z-index: 100;
+  z-index: var(--z-raised);
   height: 0; /* Don't take vertical space */
 }
 
@@ -455,7 +460,7 @@
   font-size: 0.875rem;
   border-radius: var(--radius-md);
   white-space: nowrap;
-  z-index: 1000;
+  z-index: var(--z-popover);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   border: 1px solid var(--border-color);
@@ -487,7 +492,7 @@
   font-size: 0.875rem;
   border-radius: var(--radius-md);
   white-space: nowrap;
-  z-index: 1000;
+  z-index: var(--z-popover);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   border: 1px solid var(--border-color);
@@ -519,7 +524,7 @@
   font-size: 0.875rem;
   border-radius: var(--radius-md);
   white-space: nowrap;
-  z-index: 1000;
+  z-index: var(--z-popover);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   border: 1px solid var(--border-color);
@@ -587,7 +592,7 @@
   gap: 1rem;
   flex-shrink: 0;
   position: relative;
-  z-index: 9999;
+  z-index: var(--z-raised);
 }
 
 .sidebar.sidebar-collapsed .sidebar-footer {
@@ -775,7 +780,7 @@
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 190;
+  z-index: var(--z-overlay);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
 }
@@ -805,7 +810,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 200;
+    z-index: var(--z-modal);
     transform: translateX(100%);
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
     width: 280px !important;
@@ -1071,5 +1076,27 @@
 
   .sidebar-footer {
     padding: 0.875rem;
+  }
+}
+
+/* ===== Desktop app: hidden title bar ===== */
+.is-desktop .main-content {
+  padding-top: var(--titlebar-height);
+}
+
+/* The sidebar runs to the top edge (like Finder); its header clears the drag strip */
+.is-desktop .sidebar-header {
+  padding-top: calc(var(--titlebar-height) + 0.25rem);
+}
+
+.is-desktop .sidebar.sidebar-collapsed .sidebar-header {
+  padding-top: calc(var(--titlebar-height) + 0.25rem);
+}
+
+/* The "notes" and AI tabs are pinned to the left edge (the end side in RTL, where row actions
+   sit). Keep a gutter for them so they never cover buttons. */
+@media (min-width: 769px) {
+  body:has(.forum-pinned-btn, .ai-assistant-pinned-btn) .content-container {
+    padding-inline-end: 2.75rem;
   }
 }

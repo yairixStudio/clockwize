@@ -1,0 +1,51 @@
+{
+  "name": "clockwize-desktop",
+  "version": "1.1.0",
+  "description": "Clockwize desktop app for macOS - window, Dock icon and menu-bar timer",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "pack": "node scripts/write-app-config.js && electron-builder --mac --dir --config.directories.output=${TMPDIR:-/tmp}/clockwize-desktop-build",
+    "install-app": "node scripts/install-app.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.yairix.clockwize",
+    "productName": "Clockwize",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        "dir"
+      ],
+      "identity": null,
+      "darkModeSupport": true,
+      "extendInfo": {
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      }
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "popover-preload.js",
+      "loading.html",
+      "popover.html",
+      "lib/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/app-config.json",
+        "to": "app-config.json"
+      }
+    ]
+  }
+}

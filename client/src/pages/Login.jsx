@@ -1,21 +1,70 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { KeyRound } from 'lucide-react';
+import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import useStore from '../store/useStore';
 import { useModal } from '../components/Modal';
-import { authAPI } from '../services/api';
+import { authAPI, passkeysAPI } from '../services/api';
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [userId, setUserId] = useState(null);
   const [currentPassword, setCurrentPassword] = useState('');
-  const { login } = useStore();
+  const { login, completeAuth } = useStore();
   const navigate = useNavigate();
   const modal = useModal();
+  const [searchParams] = useSearchParams();
+  // The desktop app can't show the macOS passkey sheet, so it hands passkey sign-in to the
+  // default browser (?passkey=desktop) and picks the session up from the server afterwards
+  const desktop = window.clockwizeDesktop;
+  const forDesktopApp = searchParams.get('passkey') === 'desktop';
+  const [browserLoginPending, setBrowserLoginPending] = useState(false);
+
+  const navigateAfterAuth = () => {
+    const pendingInviteCode = localStorage.getItem('pendingInviteCode');
+    if (pendingInviteCode) {
+      localStorage.removeItem('pendingInviteCode');
+      navigate(`/join/${pendingInviteCode}`);
+    } else {
+      navigate('/');
+    }
+  };
+
+  const handlePasskeyLogin = async () => {
+    setError('');
+    setPasskeyLoading(true);
+
+    try {
+      const { flowId, options } = await passkeysAPI.loginOptions();
+      const authResponse = await startAuthentication({ optionsJSON: options });
+      const response = await passkeysAPI.loginVerify({ flowId, response: authResponse });
+      await completeAuth(response);
+      navigateAfterAuth();
+    } catch (err) {
+      // NotAllowedError = the user closed the passkey dialog - not an error worth showing
+      if (err?.name !== 'NotAllowedError') {
+        setError(err.message || 'ההתחברות עם Passkey נכשלה');
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
   
+  const handlePasskeyClick = () => {
+    if (desktop?.openBrowserLogin) {
+      setError('');
+      setBrowserLoginPending(true);
+      desktop.openBrowserLogin();
+      return;
+    }
+    handlePasskeyLogin();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -35,16 +84,7 @@ function Login() {
         return;
       }
       
-      console.log('Login successful, navigating to dashboard');
-      
-      // Check for pending invite code
-      const pendingInviteCode = localStorage.getItem('pendingInviteCode');
-      if (pendingInviteCode) {
-        localStorage.removeItem('pendingInviteCode');
-        navigate(`/join/${pendingInviteCode}`);
-      } else {
-        navigate('/');
-      }
+      navigateAfterAuth();
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message);
@@ -119,8 +159,10 @@ function Login() {
       
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label className="form-label">שם משתמש / אימייל</label>
+          <label className="form-label" htmlFor="login-email">שם משתמש / אימייל</label>
           <input
+            id="login-email"
+            autoComplete="username"
             type="text"
             className="form-input"
             value={email}
@@ -139,8 +181,10 @@ function Login() {
         </div>
         
         <div className="form-group">
-          <label className="form-label">סיסמה</label>
+          <label className="form-label" htmlFor="login-password">סיסמה</label>
           <input
+            id="login-password"
+            autoComplete="current-password"
             type="password"
             className="form-input"
             value={password}
@@ -167,7 +211,37 @@ function Login() {
           {loading ? 'מתחבר...' : 'התחבר'}
         </button>
       </form>
-      
+
+      {(browserSupportsWebAuthn() || desktop?.openBrowserLogin) && (
+        <>
+          <div className="auth-divider"><span>או</span></div>
+          {forDesktopApp && (
+            <p className="auth-hint" role="status">
+              התחברות עבור אפליקציית Clockwize: לחצו על הכפתור ואשרו עם Touch ID. האפליקציה תתחבר לבד.
+            </p>
+          )}
+          <button
+            type="button"
+            className={`btn btn-lg auth-passkey-btn ${forDesktopApp ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={handlePasskeyClick}
+            disabled={passkeyLoading}
+            autoFocus={forDesktopApp}
+          >
+            <KeyRound size={18} />
+            <span>
+              {passkeyLoading
+                ? 'ממתין לאימות...'
+                : browserLoginPending ? 'ממשיכים בדפדפן…' : 'התחבר עם Passkey'}
+            </span>
+          </button>
+          {browserLoginPending && (
+            <p className="auth-hint" role="status">
+              נפתח דפדפן להתחברות עם Passkey. אחרי האישור שם, Clockwize יתחבר כאן אוטומטית.
+            </p>
+          )}
+        </>
+      )}
+
       <div className="auth-footer">
         אין לך חשבון? <Link to="/register">הירשם עכשיו</Link>
       </div>

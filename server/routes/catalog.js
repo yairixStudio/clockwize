@@ -89,6 +89,10 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
     const db = getDb(req);
     const { name, description, price, pricing_type, unit, category, is_active, notes } = req.body;
     
+    if (!name) {
+      return res.status(400).json({ error: 'שם הפריט הוא שדה חובה' });
+    }
+    
     // בדיקה שהפריט שייך ל-workspace
     const existing = db.prepare(`
       SELECT id FROM catalog_items WHERE id = ? AND workspace_id = ?

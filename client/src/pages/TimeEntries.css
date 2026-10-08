@@ -61,6 +61,8 @@
 .entry-time {
   font-size: 0.75rem;
   margin-right: 1.5rem; /* space for icon alignment */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .entry-notes {
@@ -72,7 +74,8 @@
 }
 
 .font-mono {
-  font-family: monospace;
+  /* Durations mix digits with Hebrew words - keep the font, just align the digits */
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 768px) {
@@ -100,8 +103,15 @@
 
 .entry-project {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
   gap: 0.5rem;
+}
+
+/* The disclosure chevron sits before the names, like a Finder outline row */
+.entry-project .expand-btn {
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .expanded-row {
@@ -177,3 +187,52 @@
   font-size: 0.875rem;
 }
 
+
+/* Phones: each entry becomes a compact card instead of a squeezed 5-column table */
+@media (max-width: 640px) {
+  .entries-list .table thead {
+    display: none;
+  }
+
+  .entries-list .table,
+  .entries-list .table tbody {
+    display: block;
+  }
+
+  .entries-list .table tr:not(.intervals-row) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "project actions"
+      "date duration"
+      "notes notes";
+    gap: 0.375rem 0.75rem;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .entries-list .table tr:not(.intervals-row) td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .entries-list .table td:nth-child(1) { grid-area: project; min-width: 0; }
+  .entries-list .table td:nth-child(2) { grid-area: date; }
+  .entries-list .table td:nth-child(3) { grid-area: duration; align-self: end; justify-self: end; text-align: left; }
+  .entries-list .table td:nth-child(4) { grid-area: notes; max-width: none; white-space: normal; }
+  .entries-list .table td:nth-child(5) { grid-area: actions; justify-self: end; }
+
+  .entries-list .table td.entry-notes.is-empty {
+    display: none;
+  }
+
+  .entry-time {
+    margin-right: 0;
+  }
+
+  .intervals-list {
+    margin-right: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+}

@@ -4,6 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft, Calendar, X } from 'lucide-react';
 import './StatsBar.css';
 
+// Date inputs work with local calendar days - toISOString() is UTC and shifts the day east of Greenwich
+const toDateInputValue = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeChange }) {
   const navigate = useNavigate();
   const [showDateModal, setShowDateModal] = useState(false);
@@ -19,6 +23,7 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
   const handlePrevMonth = () => {
     if (onMonthChange && !dateRange) {
       const newDate = new Date(selectedMonth);
+      newDate.setDate(1);
       newDate.setMonth(newDate.getMonth() - 1);
       onMonthChange(newDate);
     }
@@ -27,6 +32,7 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
   const handleNextMonth = () => {
     if (onMonthChange && !dateRange) {
       const newDate = new Date(selectedMonth);
+      newDate.setDate(1);
       newDate.setMonth(newDate.getMonth() + 1);
       // Don't allow going to future months
       if (newDate <= new Date()) {
@@ -38,14 +44,14 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
   const handleOpenDateModal = () => {
     // Pre-fill with current values
     if (dateRange) {
-      setTempStartDate(dateRange.start.toISOString().split('T')[0]);
-      setTempEndDate(dateRange.end.toISOString().split('T')[0]);
+      setTempStartDate(toDateInputValue(dateRange.start));
+      setTempEndDate(toDateInputValue(dateRange.end));
     } else if (selectedMonth) {
       // Default to start and end of current month
       const start = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
       const end = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0);
-      setTempStartDate(start.toISOString().split('T')[0]);
-      setTempEndDate(end.toISOString().split('T')[0]);
+      setTempStartDate(toDateInputValue(start));
+      setTempEndDate(toDateInputValue(end));
     }
     setShowDateModal(true);
   };
@@ -165,7 +171,7 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                     className="form-input ltr"
                     value={tempStartDate}
                     onChange={e => setTempStartDate(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={toDateInputValue(new Date())}
                   />
                 </div>
                 
@@ -176,7 +182,7 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                     className="form-input ltr"
                     value={tempEndDate}
                     onChange={e => setTempEndDate(e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={toDateInputValue(new Date())}
                     min={tempStartDate}
                   />
                 </div>
@@ -189,8 +195,8 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                     onClick={() => {
                       const today = new Date();
                       const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                      setTempStartDate(start.toISOString().split('T')[0]);
-                      setTempEndDate(today.toISOString().split('T')[0]);
+                      setTempStartDate(toDateInputValue(start));
+                      setTempEndDate(toDateInputValue(today));
                     }}
                   >
                     החודש
@@ -202,8 +208,8 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                       const today = new Date();
                       const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                       const end = new Date(today.getFullYear(), today.getMonth(), 0);
-                      setTempStartDate(start.toISOString().split('T')[0]);
-                      setTempEndDate(end.toISOString().split('T')[0]);
+                      setTempStartDate(toDateInputValue(start));
+                      setTempEndDate(toDateInputValue(end));
                     }}
                   >
                     חודש קודם
@@ -215,8 +221,8 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                       const today = new Date();
                       const start = new Date(today);
                       start.setDate(today.getDate() - 7);
-                      setTempStartDate(start.toISOString().split('T')[0]);
-                      setTempEndDate(today.toISOString().split('T')[0]);
+                      setTempStartDate(toDateInputValue(start));
+                      setTempEndDate(toDateInputValue(today));
                     }}
                   >
                     שבוע אחרון
@@ -227,8 +233,8 @@ function StatsBar({ stats, selectedMonth, onMonthChange, dateRange, onDateRangeC
                     onClick={() => {
                       const today = new Date();
                       const start = new Date(today.getFullYear(), 0, 1);
-                      setTempStartDate(start.toISOString().split('T')[0]);
-                      setTempEndDate(today.toISOString().split('T')[0]);
+                      setTempStartDate(toDateInputValue(start));
+                      setTempEndDate(toDateInputValue(today));
                     }}
                   >
                     השנה

@@ -1,36 +1,10 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { generateToken, authMiddleware } from '../middleware/auth.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const LOCAL_SESSION_FILE = path.join(__dirname, '..', '..', '.local-session');
+import { saveLocalSession, clearLocalSession } from '../utils/localSession.js';
 
 const router = Router();
-
-// Helper to save session locally for desktop apps
-const saveLocalSession = (token, workspaceId) => {
-  try {
-    fs.writeFileSync(LOCAL_SESSION_FILE, JSON.stringify({ token, workspaceId }));
-  } catch (e) {
-    console.error('Failed to save local session:', e);
-  }
-};
-
-// Helper to clear local session
-const clearLocalSession = () => {
-  try {
-    if (fs.existsSync(LOCAL_SESSION_FILE)) {
-      fs.unlinkSync(LOCAL_SESSION_FILE);
-    }
-  } catch (e) {
-    console.error('Failed to clear local session:', e);
-  }
-};
 
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
@@ -115,6 +89,11 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'החשבון הושהה. נא פנה למנהל המערכת' });
     }
 
+    // Passkey-only accounts have no password
+    if (!user.password) {
+      return res.status(401).json({ error: 'חשבון זה משתמש ב-Passkey בלבד — התחבר עם Passkey' });
+    }
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'אימייל או סיסמה שגויים' });
@@ -158,6 +137,23 @@ router.post('/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({ error: 'שגיאה בהתחברות' });
   }
+});
+
+// Hand an existing browser session to the desktop app (it reads the local session file).
+// Used when the desktop app sends the user to the browser for a passkey sign-in but the
+// browser is already signed in.
+router.post('/desktop-handoff', authMiddleware, (req, res) => {
+  const db = getDb(req);
+  const token = req.headers.authorization.split(' ')[1];
+  const requested = req.body?.workspaceId;
+  const membership = requested
+    ? db.prepare('SELECT workspace_id FROM workspace_members WHERE workspace_id = ? AND user_id = ?').get(requested, req.userId)
+    : db.prepare('SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY joined_at ASC LIMIT 1').get(req.userId);
+  if (!membership) {
+    return res.status(400).json({ error: 'לא נמצא workspace' });
+  }
+  saveLocalSession(token, membership.workspace_id);
+  res.json({ ok: true });
 });
 
 // Get current user
@@ -246,7 +242,11 @@ router.delete('/account', authMiddleware, async (req, res) => {
   try {
     const db = getDb(req);
     const { password } = req.body;
-    
+
+    if (!password) {
+      return res.status(400).json({ error: 'נדרשת סיסמה' });
+    }
+
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
     const validPassword = await bcrypt.compare(password, user.password);
     

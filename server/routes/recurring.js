@@ -7,6 +7,17 @@ const router = express.Router();
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
 
+// Referenced client / project must belong to the workspace (otherwise their names leak through the joins)
+const findForeignReference = (db, workspaceId, { client_id, project_id }) => {
+  if (client_id && !db.prepare('SELECT id FROM clients WHERE id = ? AND workspace_id = ?').get(client_id, workspaceId)) {
+    return 'Client not found';
+  }
+  if (project_id && !db.prepare('SELECT id FROM projects WHERE id = ? AND workspace_id = ?').get(project_id, workspaceId)) {
+    return 'Project not found';
+  }
+  return null;
+};
+
 // Get all recurring payments
 router.get('/', authMiddleware, workspaceMiddleware, (req, res) => {
   try {
@@ -99,6 +110,11 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       return res.status(400).json({ error: 'Either client_id or project_id is required' });
     }
 
+    const foreignError = findForeignReference(db, req.workspaceId, { client_id, project_id });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
+    }
+
     const id = uuidv4();
     const createdAt = new Date().toISOString();
 
@@ -113,7 +129,7 @@ router.post('/', authMiddleware, workspaceMiddleware, (req, res) => {
       client_id || null,
       project_id || null,
       req.workspaceId,
-      req.user.id,
+      req.userId,
       type,
       amount,
       interval,
@@ -165,6 +181,15 @@ router.put('/:id', authMiddleware, workspaceMiddleware, (req, res) => {
 
     if (!existing) {
       return res.status(404).json({ error: 'Recurring payment not found' });
+    }
+
+    // Only values that change are checked, so a stale stored reference does not block edits
+    const foreignError = findForeignReference(db, req.workspaceId, {
+      client_id: client_id !== existing.client_id ? client_id : null,
+      project_id: project_id !== existing.project_id ? project_id : null
+    });
+    if (foreignError) {
+      return res.status(404).json({ error: foreignError });
     }
 
     const updatedAt = new Date().toISOString();

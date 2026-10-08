@@ -1,12 +1,49 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { authMiddleware, workspaceMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
 // Helper to get db from app
 const getDb = (req) => req.app.locals.db;
+
+// Access sessions for protected links are signed server-side and kept in an
+// httpOnly cookie - never trust verification flags coming from the query string
+const ACCESS_TOKEN_TTL = '2h';
+const ACCESS_COOKIE_MAX_AGE = 2 * 60 * 60 * 1000;
+const accessCookieName = (linkId) => `share_access_${linkId}`;
+
+// The only share types the access check knows how to protect - anything else is refused
+const SHARE_TYPES = ['public', 'password', 'email'];
+
+const grantAccess = (res, link) => {
+  const token = jwt.sign({ linkId: link.id }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+  res.cookie(accessCookieName(link.id), token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/api/share',
+    maxAge: ACCESS_COOKIE_MAX_AGE
+  });
+};
+
+const hasVerifiedAccess = (req, link) => {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return false;
+
+  const prefix = `${accessCookieName(link.id)}=`;
+  const cookie = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith(prefix));
+  if (!cookie) return false;
+
+  try {
+    const decoded = jwt.verify(decodeURIComponent(cookie.slice(prefix.length)), process.env.JWT_SECRET);
+    return decoded.linkId === link.id;
+  } catch (error) {
+    return false;
+  }
+};
 
 // Create a new shared link
 router.post('/', authMiddleware, workspaceMiddleware, async (req, res) => {
@@ -32,6 +69,16 @@ router.post('/', authMiddleware, workspaceMiddleware, async (req, res) => {
 
     if (!resource) {
       return res.status(404).json({ error: 'משאב לא נמצא' });
+    }
+
+    if (!SHARE_TYPES.includes(share_type)) {
+      return res.status(400).json({ error: 'סוג שיתוף לא חוקי' });
+    }
+    if (share_type === 'password' && !password) {
+      return res.status(400).json({ error: 'נדרשת סיסמא ללינק מוגן בסיסמא' });
+    }
+    if (share_type === 'email' && !(allowed_email && allowed_email.trim())) {
+      return res.status(400).json({ error: 'נדרש מייל ללינק מוגבל למייל' });
     }
 
     const id = uuidv4();
@@ -133,23 +180,41 @@ router.put('/:id', authMiddleware, workspaceMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'לינק לא נמצא' });
     }
 
+    // A partial update (e.g. just { is_active }) keeps the current type, password and email
+    const effectiveType = share_type || existing.share_type;
+    if (share_type !== undefined && !SHARE_TYPES.includes(share_type)) {
+      return res.status(400).json({ error: 'סוג שיתוף לא חוקי' });
+    }
+    // Only an update that touches the protection is validated - so a link can always be
+    // renamed or switched off, even one left broken by older versions
+    const changesProtection = share_type !== undefined || password !== undefined || allowed_email !== undefined;
+
     // Hash password if provided
     let hashedPassword = existing.share_password;
-    if (share_type === 'password' && password) {
+    if (effectiveType === 'password' && password) {
       hashedPassword = await bcrypt.hash(password, 10);
-    } else if (share_type !== 'password') {
+    } else if (effectiveType !== 'password') {
       hashedPassword = null;
+    }
+    if (changesProtection && effectiveType === 'password' && !hashedPassword) {
+      return res.status(400).json({ error: 'נדרשת סיסמא ללינק מוגן בסיסמא' });
     }
 
     // Normalize email if provided
-    const normalizedEmail = allowed_email ? allowed_email.toLowerCase().trim() : null;
+    let normalizedEmail = allowed_email ? allowed_email.toLowerCase().trim() : null;
+    if (allowed_email === undefined && effectiveType === 'email') {
+      normalizedEmail = existing.allowed_email;
+    }
+    if (changesProtection && effectiveType === 'email' && !normalizedEmail) {
+      return res.status(400).json({ error: 'נדרש מייל ללינק מוגבל למייל' });
+    }
 
     db.prepare(`
       UPDATE shared_links 
       SET share_type = ?, share_password = ?, allowed_email = ?, name = ?, is_active = ?, expires_at = ?
       WHERE id = ? AND workspace_id = ?
     `).run(
-      share_type || existing.share_type,
+      effectiveType,
       hashedPassword,
       normalizedEmail,
       name !== undefined ? name : existing.name,
@@ -243,23 +308,26 @@ router.post('/verify-password/:token', async (req, res) => {
       return res.status(400).json({ error: 'לינק זה לא מוגן בסיסמא' });
     }
 
-    const isValid = await bcrypt.compare(password, link.share_password);
+    if (!password) {
+      return res.status(400).json({ error: 'נדרשת סיסמא' });
+    }
+
+    const isValid = link.share_password ? await bcrypt.compare(String(password), link.share_password) : false;
     if (!isValid) {
       return res.status(401).json({ error: 'סיסמא שגויה' });
     }
 
-    // Return access token for this session
-    const accessToken = uuidv4();
-    
+    // Grant a signed access session for this link
+    grantAccess(res, link);
+
     // Log access
     db.prepare(`
       INSERT INTO shared_link_access (id, shared_link_id, created_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `).run(uuidv4(), link.id);
 
-    res.json({ 
-      success: true, 
-      access_token: accessToken,
+    res.json({
+      success: true,
       resource_type: link.resource_type,
       resource_id: link.resource_id
     });
@@ -291,9 +359,12 @@ router.post('/verify-email/:token', authMiddleware, (req, res) => {
     // Get user's email
     const user = db.prepare('SELECT email FROM users WHERE id = ?').get(req.userId);
     
-    if (user.email.toLowerCase() !== link.allowed_email.toLowerCase()) {
+    if (!user || !link.allowed_email || user.email.toLowerCase() !== link.allowed_email.toLowerCase()) {
       return res.status(403).json({ error: 'אין לך הרשאה לצפות בלינק זה' });
     }
+
+    // Grant a signed access session for this link
+    grantAccess(res, link);
 
     // Log access
     db.prepare(`
@@ -301,7 +372,7 @@ router.post('/verify-email/:token', authMiddleware, (req, res) => {
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     `).run(uuidv4(), link.id, user.email, req.userId);
 
-    res.json({ 
+    res.json({
       success: true,
       resource_type: link.resource_type,
       resource_id: link.resource_id
@@ -316,7 +387,6 @@ router.post('/verify-email/:token', authMiddleware, (req, res) => {
 router.get('/access/:token', (req, res) => {
   try {
     const db = getDb(req);
-    const { password_verified, user_email } = req.query;
 
     const link = db.prepare('SELECT * FROM shared_links WHERE share_token = ?').get(req.params.token);
 
@@ -338,16 +408,19 @@ router.get('/access/:token', (req, res) => {
       return getResourceData(db, link, res);
     }
 
-    // For password links, require verification flag
-    if (link.share_type === 'password' && !password_verified) {
+    // For password links, require a verified access session
+    if (link.share_type === 'password' && !hasVerifiedAccess(req, link)) {
       return res.status(401).json({ error: 'נדרש אימות סיסמא', requires_password: true });
     }
 
-    // For email links, require user email match
-    if (link.share_type === 'email') {
-      if (!user_email || user_email.toLowerCase() !== link.allowed_email.toLowerCase()) {
-        return res.status(401).json({ error: 'נדרשת התחברות', requires_email: true, allowed_email: link.allowed_email });
-      }
+    // For email links, require a verified access session
+    if (link.share_type === 'email' && !hasVerifiedAccess(req, link)) {
+      return res.status(401).json({ error: 'נדרשת התחברות', requires_email: true });
+    }
+
+    // Unknown share type - fail closed instead of serving the data
+    if (!SHARE_TYPES.includes(link.share_type)) {
+      return res.status(403).json({ error: 'סוג שיתוף לא נתמך' });
     }
 
     return getResourceData(db, link, res);
@@ -374,7 +447,7 @@ function getResourceData(db, link, res) {
       SELECT p.id, p.name, p.description, p.status, p.pricing_type,
         (SELECT COALESCE(SUM(duration), 0) FROM time_entries WHERE project_id = p.id) as total_time
       FROM projects p 
-      WHERE p.client_id = ?
+      WHERE p.client_id = ? AND (p.is_internal IS NULL OR p.is_internal = 0)
     `).all(client.id);
 
     client.projects = projects;

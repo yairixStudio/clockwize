@@ -1,13 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
-import { fileURLToPath } from 'url';
+import { DB_PATH, BACKUP_DIR } from './paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DB_PATH = path.join(__dirname, 'clockwize.db');
-const BACKUP_DIR = path.join(__dirname, '..', 'backups');
 const BACKUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const BACKUP_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 

@@ -374,6 +374,7 @@
 /* Carousel Dots */
 .carousel-dots {
   display: flex;
+  flex-wrap: wrap; /* many items => wrap instead of squeezing every dot to a sliver */
   gap: 0.375rem;
   justify-content: center;
   margin-top: 0.5rem;
@@ -381,22 +382,34 @@
 }
 
 .carousel-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--border-color);
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: transparent;
   border: none;
   cursor: pointer;
-  transition: all var(--transition-fast);
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.carousel-dot:hover {
+.carousel-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.carousel-dot:hover::before {
   background: var(--text-secondary);
   transform: scale(1.2);
 }
 
-.carousel-dot.active {
+.carousel-dot.active::before {
   background: var(--accent-primary);
   width: 20px;
   border-radius: 3px;
@@ -1340,4 +1353,25 @@
 
 .task-card:hover .project-card-menu-btn {
   opacity: 1;
+}
+
+/* Carousel edges fade out, so a half-visible card reads as "more this way" and the arrows
+   sit over the faded strip instead of on top of card text */
+.tasks-carousel {
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+  mask-image: linear-gradient(to left, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+  padding-inline: 12px;
+  scroll-padding-inline: 12px;
+}
+
+@media (max-width: 480px) {
+  /* Keep the page dots on one line */
+  .carousel-dot {
+    width: 20px;
+    height: 24px;
+  }
+
+  .carousel-dots {
+    gap: 0.125rem;
+  }
 }

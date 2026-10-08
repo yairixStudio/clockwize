@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Check, Key, Plug, Puzzle, Settings, Save, FileText, StickyNote, Info, X, Filter, Target, Bell, Package, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { Check, Key, Plug, Puzzle, Settings, Save, FileText, StickyNote, Info, X, Filter, Target, Bell, Package, Sparkles, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import PasskeysManager from '../components/PasskeysManager';
 import api, { addonsAPI, authAPI } from '../services/api';
 import { apps } from '../apps';
 import { useModal } from '../components/Modal';
@@ -204,6 +205,13 @@ function SettingsPage() {
             <Settings size={18} />
             <span>הגדרות כלליות</span>
           </button>
+          <button
+            className={`settings-nav-btn ${activeTab === 'security' ? 'active' : ''}`}
+            onClick={() => setActiveTab('security')}
+          >
+            <ShieldCheck size={18} />
+            <span>אבטחה</span>
+          </button>
         </nav>
 
         <div className="settings-page-content">
@@ -380,6 +388,15 @@ function SettingsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* ===== SECURITY TAB ===== */}
+          {activeTab === 'security' && (
+            <div className="security-settings">
+              <div className="settings-section">
+                <PasskeysManager />
+              </div>
             </div>
           )}
         </div>
